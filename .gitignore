@@ -54,4 +54,7 @@ dist/
 *.swo
 
 # Files
-test_curls.txt
+legacy_app_for_endpoints.py
+masking_unmasking_old_example.py
+bulk_test_20800.geojson
+generate_synthetic_geojson.py

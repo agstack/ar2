@@ -20,6 +20,7 @@ from app.s2_services import S2Service
 
 from fastapi.responses import StreamingResponse
 import asyncio
+import time
 
 router = APIRouter(prefix="", tags=["Point Registration"])
 
@@ -48,6 +49,7 @@ async def register_point(
             return {
                 "message": "Point already registered.",
                 "Geo Id": existing_record.geo_id,
+                "Geo Id Short": existing_record.geo_id_short,
                 "Geo JSON": Utils.get_geo_json(existing_record.geo_data.get('wkt', point_wkt))
             }
 
@@ -83,6 +85,7 @@ async def register_point(
             response_payload = {
                 "message": "Point registered successfully.",
                 "Geo Id": geo_id,
+                "Geo Id Short": geo_id_short,
                 "Geo JSON": point_geo_json
             }
 
@@ -103,6 +106,7 @@ async def register_point(
                 detail={
                     "message": "Point already registered.",
                     "Geo Id": geo_id_l20,
+                    "Geo Id Short": GeoDataUtils.generate_short_geo_id(geo_id_l20),
                     "Geo JSON requested": point_geo_json,
                     "Geo JSON registered": Utils.get_geo_json(geo_id_exists_wkt)
                 }
@@ -282,6 +286,7 @@ async def register_points_geojson(
             "message": "Starting bulk point registration..."
         }) + "\n"
 
+        start_time = time.time()
         for index, feature in enumerate(features):
             try:
                 geometry_type = feature.get('geometry', {}).get('type')
@@ -355,7 +360,7 @@ async def register_points_geojson(
                         db=db, geo_id=geo_id, geo_id_short=geo_id_short, content_hash=content_hash,
                         indices=indices, records_list=records_list, field_wkt=point_wkt, 
                         country=country, boundary_type=boundary_type, field_name=field_name,
-                        area_ha_approx=area_ha
+                        area_ha_approx=area_ha, commit=False
                     )
                     
                     geo_data_to_return = None
@@ -395,11 +400,15 @@ async def register_points_geojson(
                 "percentage": round(((index + 1) / total_features) * 100, 2)
             }) + "\n"
 
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
+
+        db.commit()
+        time_taken = time.time() - start_time
 
         yield json.dumps({
             "status": "completed",
             "message": "Bulk point registration completed",
+            "time_taken_seconds": round(time_taken, 2),
             "results": results
         }) + "\n"
 

@@ -42,6 +42,7 @@ class GeoDataUtils:
         return hashlib.sha256(canonical_wkb).hexdigest()
 
 class Utils:
+    _wrs_gdf = None
 
     @staticmethod
     def get_geo_json(field_wkt: str) -> dict:
@@ -57,9 +58,14 @@ class Utils:
         world_shp_file = os.getenv("world_shp_file_PATH")
         
         try:
-            wrs_gdf = gpd.read_file(world_shp_file)
-            wrs_gdf = wrs_gdf.to_crs(4326)
-            return wrs_gdf[wrs_gdf.contains(p)].reset_index(drop=True).CNTRY_NAME.iloc[0]
+            if Utils._wrs_gdf is None:
+                wrs_gdf = gpd.read_file(world_shp_file)
+                Utils._wrs_gdf = wrs_gdf.to_crs(4326)
+            
+            matches = Utils._wrs_gdf[Utils._wrs_gdf.contains(p)]
+            if not matches.empty:
+                return matches.reset_index(drop=True).CNTRY_NAME.iloc[0]
+            return ''
         except Exception as e:
             print(f"Country detection error: {e}")
             return ''
@@ -111,7 +117,7 @@ class Utils:
     def register_field_boundary(
         db: Session, geo_id: str, geo_id_short: str, content_hash: str, 
         indices: dict, records_list: list, field_wkt: str, country: str, 
-        boundary_type: str, field_name: str = None, area_ha_approx: float = None  # <--- Added parameter
+        boundary_type: str, field_name: str = None, area_ha_approx: float = None, commit: bool = True
     ):
 
         try:
@@ -132,11 +138,13 @@ class Utils:
             )
 
             db.add(geo_id_record)
-            db.commit()
+            if commit:
+                db.commit()
             
             return geo_data
         except Exception as e:
-            db.rollback()
+            if commit:
+                db.rollback()
             raise e
 
     @staticmethod
@@ -281,3 +289,26 @@ class Utils:
         except Exception as e:
             print(f"Analytics Error: Ensure your GeoID model has a 'created_at' column. Details: {e}")
             return []
+
+    @staticmethod
+    def get_eudr_multipolygon(wkt_string: str) -> dict:
+        import shapely
+        from shapely.geometry import mapping, MultiPolygon, Polygon
+        geom = load_wkt(wkt_string)
+        
+        # Ensure 2D and 6-decimal precision
+        geom = shapely.ops.transform(lambda x, y, *args: (round(x, 6), round(y, 6)), geom)
+        
+        if isinstance(geom, Polygon):
+            geom = MultiPolygon([geom])
+            
+        if isinstance(geom, MultiPolygon):
+            polys = []
+            for poly in geom.geoms:
+                polys.append(shapely.geometry.polygon.orient(poly, sign=1.0))
+            geom = MultiPolygon(polys)
+            
+        geojson_dict = {"type": "Feature"}
+        geojson_string = geojson.dumps(mapping(geom))
+        geojson_dict["geometry"] = json.loads(geojson_string)
+        return geojson_dict

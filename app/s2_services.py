@@ -99,3 +99,23 @@ class S2Service:
         for s2_cell_id in s2_cell_ids:
             s2_token_list.append(s2_cell_id.to_token())
         return s2_token_list
+
+    @staticmethod
+    def get_s2_level_10_polygon(lat, long):
+        latlng = s2.LatLng.from_degrees(lat, long)
+        cell_id = s2.CellId.from_lat_lng(latlng).parent(10)
+        cell = s2.Cell(cell_id)
+        coords = []
+        for i in range(4):
+            vertex = cell.get_vertex(i)
+            ll = s2.LatLng.from_point(vertex)
+            coords.append([ll.lng().degrees, ll.lat().degrees])
+        coords.append(coords[0])
+        return {
+            "token": cell_id.to_token(),
+            "geojson": {
+                "type": "Polygon",
+                "coordinates": [coords]
+            }
+        }
+

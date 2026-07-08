@@ -27,5 +27,6 @@ class GeoID(Base):
     s2_cells = Column(ARRAY(String))
     geo_data = Column(JSONB) 
     crop = Column(String)
+    mask_level = Column(String, default="L0")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

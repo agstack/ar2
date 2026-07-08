@@ -6,22 +6,72 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-from fastapi import APIRouter, HTTPException, Depends, Header, status
+from fastapi import APIRouter, HTTPException, Depends, Header, status, Query, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import Optional
 
 from app.database import get_db
 from app.models import GeoID
-
 from app.utils import Utils
-from fastapi import APIRouter, HTTPException, Depends, Query, status
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
-from typing import Optional
-from app.schemas import FetchFieldResponse , OverlapRequest , FetchFieldsForPointRequest
+from app.schemas import FetchFieldResponse, OverlapRequest, FetchFieldsForPointRequest
 from app.s2_services import S2Service
 
 router = APIRouter(prefix="", tags=["Fetch Field"])
+
+def apply_masking_logic(record, authorization, s2_index=None):
+    wkt = record.geo_data.get("wkt")
+    if not wkt:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stored geometry is missing WKT data."
+        )
+
+    # L1 full view (authorized)
+    if authorization and authorization.startswith("Bearer "):
+        field_boundary_geo_json = Utils.get_geo_json(wkt)
+        masking_level = "L1"
+        filtered_geo_data = None
+        if s2_index:
+            s2_index_to_fetch = [int(i) for i in s2_index.split(',')]
+            s2_indexes_to_remove = Utils.get_s2_indexes_to_remove(s2_index_to_fetch)
+            if s2_indexes_to_remove != -1:
+                temp_geo_data = dict(record.geo_data) 
+                filtered_geo_data = Utils.get_specific_s2_index_geo_data(
+                    temp_geo_data, s2_indexes_to_remove
+                )
+                if "wkt" in filtered_geo_data:
+                    filtered_geo_data.pop("wkt")
+        return {
+            "message": "Field fetched successfully.",
+            "GEO Id": record.geo_id,
+            "GEO Id Short": record.geo_id_short,
+            "MaskingLevel": masking_level,
+            "Geo Data": filtered_geo_data,
+            "Geo JSON": field_boundary_geo_json
+        }
+
+    # L0 masked view (public)
+    centroid = Utils.fetch_field_centroid_by_wkt(wkt)
+    s2_l10_data = S2Service.get_s2_level_10_polygon(lat=centroid[1], long=centroid[0])
+    
+    area_ha = round(record.area_ha_approx, 1) if record.area_ha_approx is not None else None
+
+    masked_geo_data = {
+        "cell_token": s2_l10_data["token"],
+        "country": record.country,
+        "area_ha": area_ha
+    }
+    
+    return {
+        "message": "Field fetched successfully (masked).",
+        "GEO Id": record.geo_id,
+        "GEO Id Short": record.geo_id_short,
+        "MaskingLevel": record.mask_level or "L0",
+        "Geo Data": masked_geo_data,
+        "Geo JSON": s2_l10_data["geojson"]
+    }
+
 
 @router.get("/translate-geoid-to-short/{geo_id}", tags=["GeoID Translation"])
 async def translate_to_short(geo_id: str, db: Session = Depends(get_db)):
@@ -46,14 +96,14 @@ async def translate_to_full(geo_id_short: str, db: Session = Depends(get_db)):
     return {"geo_id_short": geo_id_short, "geo_id": record.geo_id}
 
 
-
+@router.get("/resolve/{geo_id}", response_model=FetchFieldResponse, tags=["Field Fetch"])
 @router.get("/fetch-field/{geo_id}", response_model=FetchFieldResponse, tags=["Field Fetch"])
 async def fetch_field(
     geo_id: str,
+    request: Request,
     s2_index: Optional[str] = Query(None, description="Comma-separated S2 levels to fetch (e.g., '13,20')"),
     db: Session = Depends(get_db)
 ):
-
     try:
         record = db.query(GeoID).filter(
             or_(
@@ -68,36 +118,8 @@ async def fetch_field(
                 detail="Field not found, invalid Geo Id."
             )
 
-        wkt = record.geo_data.get("wkt")
-        if not wkt:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Stored geometry is missing WKT data."
-            )
-            
-        field_boundary_geo_json = Utils.get_geo_json(wkt)
-
-        filtered_geo_data = None
-        if s2_index:
-            s2_index_to_fetch = [int(i) for i in s2_index.split(',')]
-            s2_indexes_to_remove = Utils.get_s2_indexes_to_remove(s2_index_to_fetch)
-            
-            if s2_indexes_to_remove != -1:
-                temp_geo_data = dict(record.geo_data) 
-                filtered_geo_data = Utils.get_specific_s2_index_geo_data(
-                    temp_geo_data, s2_indexes_to_remove
-                )
-                
-                if "wkt" in filtered_geo_data:
-                    filtered_geo_data.pop("wkt")
-
-        return {
-            "message": "Field fetched successfully.",
-            "GEO Id": record.geo_id,
-            "GEO Id Short": record.geo_id_short,
-            "Geo Data": filtered_geo_data,
-            "Geo JSON": field_boundary_geo_json
-        }
+        authorization = request.headers.get("Authorization")
+        return apply_masking_logic(record, authorization, s2_index)
 
     except HTTPException:
         raise
@@ -109,7 +131,7 @@ async def fetch_field(
 
 
 @router.get("/fetch-field-wkt/{geo_id}", tags=["Field Fetch"])
-async def fetch_field_wkt(geo_id: str, db: Session = Depends(get_db)):
+async def fetch_field_wkt(geo_id: str, request: Request, db: Session = Depends(get_db)):
     try:
         record = db.query(GeoID).filter(
             or_(GeoID.geo_id == geo_id, GeoID.geo_id_short == geo_id)
@@ -118,10 +140,20 @@ async def fetch_field_wkt(geo_id: str, db: Session = Depends(get_db)):
         if not record:
             raise HTTPException(status_code=404, detail="Field not found.")
             
+        authorization = request.headers.get("Authorization")
+        if authorization and authorization.startswith("Bearer "):
+            wkt = record.geo_data.get('wkt')
+            masking_level = "L1"
+        else:
+            wkt = None
+            masking_level = record.mask_level or "L0"
+            
         return {
-            "message": "WKT fetched successfully.",
+            "message": "WKT fetched successfully." if wkt else "WKT hidden in L0 mask.",
             "GEO Id": record.geo_id,
-            "WKT": record.geo_data.get('wkt')
+            "GEO Id Short": record.geo_id_short,
+            "MaskingLevel": masking_level,
+            "WKT": wkt
         }
     except HTTPException:
         raise
@@ -146,9 +178,44 @@ async def fetch_field_centroid(geo_id: str, db: Session = Depends(get_db)):
         centroid = Utils.fetch_field_centroid_by_wkt(field_wkt)
         return {
             "message": "Centroid fetched successfully.",
+            "GEO Id": record.geo_id,
+            "GEO Id Short": record.geo_id_short,
             "Centroid": centroid,
         }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Fetch Field Centroid Error: {str(e)}")
+
+@router.get("/geoid/{geo_id}/eudr-export", tags=["Field Fetch"])
+async def eudr_export(geo_id: str, request: Request, db: Session = Depends(get_db)):
+    authorization = request.headers.get("Authorization")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="L1 authorization required for EUDR export")
+        
+    try:
+        record = db.query(GeoID).filter(
+            or_(GeoID.geo_id == geo_id, GeoID.geo_id_short == geo_id)
+        ).first()
+        
+        if not record:
+            raise HTTPException(status_code=404, detail="Field not found.")
+            
+        field_wkt = record.geo_data.get('wkt')
+        if not field_wkt:
+            raise HTTPException(status_code=500, detail="Stored geometry is missing WKT data.")
+            
+        eudr_geojson = Utils.get_eudr_multipolygon(field_wkt)
+        
+        return {
+            "message": "EUDR export generated successfully.",
+            "GEO Id": record.geo_id,
+            "GEO Id Short": record.geo_id_short,
+            "MaskingLevel": "L1",
+            "Geo JSON": eudr_geojson
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"EUDR Export Error: {str(e)}")
+

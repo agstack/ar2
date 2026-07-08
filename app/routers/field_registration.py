@@ -21,6 +21,7 @@ from app.s2_services import S2Service
 
 import asyncio
 from fastapi.responses import StreamingResponse
+import time
 
 router = APIRouter(prefix="", tags=["Field Registration"])
 
@@ -45,6 +46,7 @@ async def register_field_boundary(
             response_data = {
                 "message": "Exact geometry already registered.",
                 "Geo Id": existing_record.geo_id,
+                "Geo Id Short": existing_record.geo_id_short,
                 "matched geo ids": [existing_record.geo_id],
                 "S2 Cell Tokens": None
             }
@@ -102,7 +104,7 @@ async def register_field_boundary(
                 country=country, boundary_type=boundary_type, field_name=field_name,area_ha_approx=area_ha
             )
 
-            response_data = {"message": "Field Boundary registered successfully.", "Geo Id": geo_id}
+            response_data = {"message": "Field Boundary registered successfully.", "Geo Id": geo_id, "Geo Id Short": geo_id_short}
 
             if payload.return_s2_indices and payload.s2_index:
                 s2_index_to_fetch = [int(i) for i in payload.s2_index.split(',')]
@@ -143,7 +145,7 @@ async def register_field_boundary(
                 country=country, boundary_type=boundary_type, field_name=field_name,area_ha_approx=area_ha
             )
 
-            response_data = {"message": "Field Boundary registered successfully.", "Geo Id": geo_id_l20}
+            response_data = {"message": "Field Boundary registered successfully.", "Geo Id": geo_id_l20, "Geo Id Short": geo_id_l20_short}
 
             if payload.return_s2_indices and payload.s2_index:
                 s2_index_to_fetch = [int(i) for i in payload.s2_index.split(',')]
@@ -157,7 +159,7 @@ async def register_field_boundary(
 
             return response_data
 
-        return {"message": "Field Boundary already registered.", "Geo Id": geo_id_l20}
+        return {"message": "Field Boundary already registered.", "Geo Id": geo_id_l20, "Geo Id Short": geo_id_l20_short}
 
     except HTTPException:
         raise
@@ -382,6 +384,7 @@ async def register_field_boundaries_geojson(
             "message": "Starting bulk registration..."
         }) + "\n"
 
+        start_time = time.time()
         for index, feature in enumerate(features):
             try:
                 field_wkt = Utils.geojson_to_wkt(feature)
@@ -470,7 +473,8 @@ async def register_field_boundaries_geojson(
                     geo_data = Utils.register_field_boundary(
                         db=db, geo_id=geo_id, geo_id_short=geo_id_short, content_hash=content_hash,
                         indices=indices, records_list=records_list, field_wkt=field_wkt, 
-                        country=country, boundary_type=boundary_type, field_name=field_name,area_ha_approx=area_ha
+                        country=country, boundary_type=boundary_type, field_name=field_name,area_ha_approx=area_ha,
+                        commit=False
                     )
                     
                     geo_data_to_return = None
@@ -556,11 +560,15 @@ async def register_field_boundaries_geojson(
                 "percentage": round(((index + 1) / total_features) * 100, 2)
             }) + "\n"
 
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
+
+        db.commit()
+        time_taken = time.time() - start_time
 
         yield json.dumps({
             "status": "completed",
             "message": "Bulk registration completed",
+            "time_taken_seconds": round(time_taken, 2),
             "results": results
         }) + "\n"
 

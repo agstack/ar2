@@ -24,6 +24,7 @@ class PointRegistrationRequest(BaseModel):
 class FieldRegistrationResponse(BaseModel):
     message: str
     geo_id: Optional[str] = Field(None, alias="Geo Id")
+    geo_id_short: Optional[str] = Field(None, alias="Geo Id Short")
     matched_geo_ids: Optional[list] = Field(None, alias="matched geo ids")
     s2_cell_tokens: Optional[Dict[str, Any]] = Field(None, alias="S2 Cell Tokens")
 
@@ -31,6 +32,7 @@ class FetchFieldResponse(BaseModel):
     message: str
     geo_id: str = Field(..., alias="GEO Id")
     geo_id_short: str = Field(..., alias="GEO Id Short")
+    masking_level: Optional[str] = Field(None, alias="MaskingLevel")
     geo_data: Optional[Dict[str, Any]] = Field(None, alias="Geo Data")
     geo_json: Dict[str, Any] = Field(..., alias="Geo JSON")
 
