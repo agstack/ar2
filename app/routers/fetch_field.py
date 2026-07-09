@@ -16,10 +16,11 @@ from app.models import GeoID
 from app.utils import Utils
 from app.schemas import FetchFieldResponse, OverlapRequest, FetchFieldsForPointRequest
 from app.s2_services import S2Service
+from app.auth import get_current_user, require_l1
 
 router = APIRouter(prefix="", tags=["Fetch Field"])
 
-def apply_masking_logic(record, authorization, s2_index=None):
+def apply_masking_logic(record, user, s2_index=None):
     wkt = record.geo_data.get("wkt")
     if not wkt:
         raise HTTPException(
@@ -28,7 +29,7 @@ def apply_masking_logic(record, authorization, s2_index=None):
         )
 
     # L1 full view (authorized)
-    if authorization and authorization.startswith("Bearer "):
+    if user:
         field_boundary_geo_json = Utils.get_geo_json(wkt)
         masking_level = "L1"
         filtered_geo_data = None
@@ -100,8 +101,8 @@ async def translate_to_full(geo_id_short: str, db: Session = Depends(get_db)):
 @router.get("/fetch-field/{geo_id}", response_model=FetchFieldResponse, tags=["Field Fetch"])
 async def fetch_field(
     geo_id: str,
-    request: Request,
     s2_index: Optional[str] = Query(None, description="Comma-separated S2 levels to fetch (e.g., '13,20')"),
+    user: dict | None = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     try:
@@ -118,8 +119,7 @@ async def fetch_field(
                 detail="Field not found, invalid Geo Id."
             )
 
-        authorization = request.headers.get("Authorization")
-        return apply_masking_logic(record, authorization, s2_index)
+        return apply_masking_logic(record, user, s2_index)
 
     except HTTPException:
         raise
@@ -131,7 +131,7 @@ async def fetch_field(
 
 
 @router.get("/fetch-field-wkt/{geo_id}", tags=["Field Fetch"])
-async def fetch_field_wkt(geo_id: str, request: Request, db: Session = Depends(get_db)):
+async def fetch_field_wkt(geo_id: str, user: dict | None = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         record = db.query(GeoID).filter(
             or_(GeoID.geo_id == geo_id, GeoID.geo_id_short == geo_id)
@@ -140,8 +140,7 @@ async def fetch_field_wkt(geo_id: str, request: Request, db: Session = Depends(g
         if not record:
             raise HTTPException(status_code=404, detail="Field not found.")
             
-        authorization = request.headers.get("Authorization")
-        if authorization and authorization.startswith("Bearer "):
+        if user:
             wkt = record.geo_data.get('wkt')
             masking_level = "L1"
         else:
@@ -162,7 +161,7 @@ async def fetch_field_wkt(geo_id: str, request: Request, db: Session = Depends(g
 
 
 @router.get("/fetch-field-centroid/{geo_id}", tags=["Field Fetch"])
-async def fetch_field_centroid(geo_id: str, db: Session = Depends(get_db)):
+async def fetch_field_centroid(geo_id: str, user: dict | None = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         record = db.query(GeoID).filter(
             or_(GeoID.geo_id == geo_id, GeoID.geo_id_short == geo_id)
@@ -176,22 +175,33 @@ async def fetch_field_centroid(geo_id: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="Field WKT not found, fetch Field Centroid Error.")
             
         centroid = Utils.fetch_field_centroid_by_wkt(field_wkt)
-        return {
-            "message": "Centroid fetched successfully.",
-            "GEO Id": record.geo_id,
-            "GEO Id Short": record.geo_id_short,
-            "Centroid": centroid,
-        }
+        
+        if user:
+            return {
+                "message": "Centroid fetched successfully.",
+                "GEO Id": record.geo_id,
+                "GEO Id Short": record.geo_id_short,
+                "MaskingLevel": "L1",
+                "Centroid": centroid,
+            }
+        else:
+            s2_l10_data = S2Service.get_s2_level_10_polygon(lat=centroid[1], long=centroid[0])
+            from shapely.geometry import shape
+            l10_centroid = shape(s2_l10_data["geojson"]).centroid
+            return {
+                "message": "Centroid fetched successfully (masked).",
+                "GEO Id": record.geo_id,
+                "GEO Id Short": record.geo_id_short,
+                "MaskingLevel": "L0",
+                "Centroid": [l10_centroid.x, l10_centroid.y],
+            }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Fetch Field Centroid Error: {str(e)}")
 
 @router.get("/geoid/{geo_id}/eudr-export", tags=["Field Fetch"])
-async def eudr_export(geo_id: str, request: Request, db: Session = Depends(get_db)):
-    authorization = request.headers.get("Authorization")
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="L1 authorization required for EUDR export")
+async def eudr_export(geo_id: str, user: dict = Depends(require_l1), db: Session = Depends(get_db)):
         
     try:
         record = db.query(GeoID).filter(

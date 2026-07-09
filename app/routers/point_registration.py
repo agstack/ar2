@@ -43,19 +43,22 @@ async def register_point(
         # points have exactly 0 area
         area_ha = 0.0 
         
+        point_geo_json = Utils.get_geo_json(point_wkt)
+        lng = point_geo_json['geometry']['coordinates'][0]
+        lat = point_geo_json['geometry']['coordinates'][1]
+
         content_hash = GeoDataUtils.generate_content_hash(point_wkt)
         existing_record = db.query(GeoID).filter(GeoID.content_hash == content_hash).first()
         if existing_record:
+            s2_l10_data = S2Service.get_s2_level_10_polygon(lat=lat, long=lng)
             return {
                 "message": "Point already registered.",
                 "Geo Id": existing_record.geo_id,
                 "Geo Id Short": existing_record.geo_id_short,
-                "Geo JSON": Utils.get_geo_json(existing_record.geo_data.get('wkt', point_wkt))
+                "MaskingLevel": "L0",
+                "Geo JSON": s2_l10_data["geojson"]
             }
 
-        point_geo_json = Utils.get_geo_json(point_wkt)
-        lng = point_geo_json['geometry']['coordinates'][0]
-        lat = point_geo_json['geometry']['coordinates'][1]
         country = Utils.get_country_from_point([lng, lat])
 
         indices = {
@@ -101,14 +104,16 @@ async def register_point(
 
             return response_payload
         else:
+            s2_l10_data = S2Service.get_s2_level_10_polygon(lat=lat, long=lng)
             raise HTTPException(
                 status_code=400,
                 detail={
                     "message": "Point already registered.",
                     "Geo Id": geo_id_l20,
                     "Geo Id Short": GeoDataUtils.generate_short_geo_id(geo_id_l20),
+                    "MaskingLevel": "L0",
                     "Geo JSON requested": point_geo_json,
-                    "Geo JSON registered": Utils.get_geo_json(geo_id_exists_wkt)
+                    "Geo JSON registered": s2_l10_data["geojson"]
                 }
             )
 
@@ -305,6 +310,8 @@ async def register_points_geojson(
                     continue
 
                 point_wkt = Utils.geojson_to_wkt(feature)
+                lat = feature['geometry']['coordinates'][1]
+                lng = feature['geometry']['coordinates'][0]
                 
                 properties = feature.get('properties', {})
                 field_name = properties.get('field_name')
@@ -316,11 +323,13 @@ async def register_points_geojson(
                 content_hash = GeoDataUtils.generate_content_hash(point_wkt)
                 existing_record = db.query(GeoID).filter(GeoID.content_hash == content_hash).first()
                 if existing_record:
+                    s2_l10_data = S2Service.get_s2_level_10_polygon(lat=lat, long=lng)
                     results.append({
                         "status": "exists",
                         "message": "Exact geometry already registered.",
                         "geo_id": existing_record.geo_id,
-                        "geo_json": feature
+                        "MaskingLevel": "L0",
+                        "geo_json": s2_l10_data["geojson"]
                     })
                     yield json.dumps({
                         "status": "processing", 
@@ -329,8 +338,6 @@ async def register_points_geojson(
                     }) + "\n"
                     continue
 
-                lat = feature['geometry']['coordinates'][1]
-                lng = feature['geometry']['coordinates'][0]
                 country = Utils.get_country_from_point([lng, lat])
 
                 indices = {
@@ -377,12 +384,14 @@ async def register_points_geojson(
                         "Geo JSON": feature
                     })
                 else:
+                    s2_l10_data = S2Service.get_s2_level_10_polygon(lat=lat, long=lng)
                     results.append({
                         "status": "exists",
                         "message": "Point already registered.",
                         "Geo Id": geo_id_l20,
+                        "MaskingLevel": "L0",
                         "Geo JSON requested": feature,
-                        "Geo JSON registered": Utils.get_geo_json(geo_id_exists_wkt)
+                        "Geo JSON registered": s2_l10_data["geojson"]
                     })
 
             except Exception as point_error:

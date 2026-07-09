@@ -16,6 +16,7 @@ from app.utils import Utils
 from sqlalchemy import or_
 from app.schemas import FetchFieldsForPointRequest , OverlapRequest
 from app.s2_services import S2Service
+from app.auth import get_current_user
 
 router = APIRouter(prefix="", tags=["Analytics", "Spatial Analysis", "Maintenance"])
 
@@ -70,7 +71,11 @@ async def get_percentage_overlap_two_fields(payload: OverlapRequest, db: Session
 
 
 @router.post("/fetch-fields-for-a-point", tags=["Spatial Analysis"])
-async def fetch_fields_for_a_point(payload: FetchFieldsForPointRequest, db: Session = Depends(get_db)):
+async def fetch_fields_for_a_point(
+    payload: FetchFieldsForPointRequest, 
+    user: dict | None = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
     try:
         s2_cell_token_13, s2_cell_token_20 = S2Service.get_cell_token_for_lat_long(
             payload.latitude, payload.longitude
@@ -80,6 +85,19 @@ async def fetch_fields_for_a_point(payload: FetchFieldsForPointRequest, db: Sess
             db, s2_cell_token_13, s2_cell_token_20, 
             payload.domain, payload.s2_index, payload.boundary_type
         )
+        
+        if not user:
+            for field in fetched_fields:
+                record = db.query(GeoID).filter(GeoID.geo_id == field["Geo Id"]).first()
+                wkt_str = record.geo_data.get('wkt')
+                centroid = Utils.fetch_field_centroid_by_wkt(wkt_str)
+                s2_l10_data = S2Service.get_s2_level_10_polygon(lat=centroid[1], long=centroid[0])
+                field["Geo JSON"] = s2_l10_data["geojson"]
+                field["MaskingLevel"] = record.mask_level or "L0"
+        else:
+            for field in fetched_fields:
+                field["MaskingLevel"] = "L1"
+
         return {"Fetched fields": fetched_fields}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Fetch Fields for a Point Error: {str(e)}")

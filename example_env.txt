@@ -1,2 +1,3 @@
 export DATABASE_URL="YOUR DB LINK"
 export world_shp_file_PATH = 'YOUR PATH TO SHAPE FILE/99bfd9e7-bb42-4728-87b5-07f8c8ac631c2020328-1-1vef4ev.lu5nk.shp'
+JWKS_URL='your_hub_auth_api'

@@ -41,6 +41,10 @@ curl -X 'GET' 'http://127.0.0.1:8000/resolve/91da02c5ceb88f879d17ea4d9e9fe369769
   -H 'accept: application/json' \
   -H 'Authorization: Bearer dummy-token'
 
+curl -X 'GET' 'http://127.0.0.1:8000/resolve/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' \
+  -H 'accept: application/json' \
+  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w'
+
 # ---------------------------------------------------------
 # FETCHING & MASKING (/fetch-field)
 # ---------------------------------------------------------
@@ -51,6 +55,13 @@ curl -X 'GET' 'http://127.0.0.1:8000/fetch-field/91da02c5ceb88f879d17ea4d9e9fe36
 curl -X 'GET' 'http://127.0.0.1:8000/fetch-field/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' \
   -H 'accept: application/json' \
   -H 'Authorization: Bearer dummy-token'
+
+
+curl -X 'GET' 'http://127.0.0.1:8000/fetch-field/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' \
+  -H 'accept: application/json' \
+  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w'
+
+eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w
 
 # ---------------------------------------------------------
 # FETCHING & MASKING WKT (/fetch-field-wkt)
@@ -63,7 +74,7 @@ curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-wkt/91da02c5ceb88f879d17ea4d9e9
 # WKT should be the full string, MaskingLevel should be L1
 curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-wkt/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' \
   -H 'accept: application/json' \
-  -H 'Authorization: Bearer dummy-token'
+  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w'
 
 # ---------------------------------------------------------
 # EUDR EXPORT
@@ -76,7 +87,7 @@ curl -X 'GET' 'http://127.0.0.1:8000/geoid/91da02c5ceb88f879d17ea4d9e9fe3697699c
 # Returns MultiPolygon in EPSG:4326, 6-decimal precision, proper ring winding.
 curl -X 'GET' 'http://127.0.0.1:8000/geoid/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a/eudr-export' \
   -H 'accept: application/json' \
-  -H 'Authorization: Bearer dummy-token'
+  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w'
 
 # ---------------------------------------------------------
 # OTHER FETCH ENDPOINTS
@@ -88,7 +99,8 @@ curl -X 'GET' 'http://127.0.0.1:8000/translate-geoid-to-short/91da02c5ceb88f879d
 curl -X 'GET' 'http://127.0.0.1:8000/translate-geoid-to-full/ddeb15879afc7b3f' -H 'accept: application/json'
 
 # STEP 13: Fetch Field Centroid
-curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-centroid/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' -H 'accept: application/json'
+curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-centroid/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' -H 'accept: application/json' \
+-H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w'
 
 # ---------------------------------------------------------
 # BULK & POINT REGISTRATIONS
@@ -140,3 +152,6 @@ curl -X 'GET' 'http://127.0.0.1:8000/fetch-registered-field-count' -H 'accept: a
 curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-count-by-country' -H 'accept: application/json'
 
 curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-count-by-month' -H 'accept: application/json'
+
+# test endpoints pytest
+source ar-env/bin/activate && PYTHONPATH=. pytest app/tests/test_api.py -v -s
