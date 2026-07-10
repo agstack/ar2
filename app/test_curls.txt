@@ -155,3 +155,12 @@ curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-count-by-month' -H 'accept: app
 
 # test endpoints pytest
 source ar-env/bin/activate && PYTHONPATH=. pytest app/tests/test_api.py -v -s
+
+curl -X 'POST' 'http://127.0.0.1:8001/register-field-boundary' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "wkt": "POLYGON ((76.57207310199738 31.02188526513206,76.57203555107118 31.021319507765583,76.572362780571 31.021319507765583,76.57239496707916 31.02189446441107,76.57207310199738 31.02188526513206))",
+  "threshold": 95,
+  "return_s2_indices": false
+}'

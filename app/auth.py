@@ -1,3 +1,7 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import os
 import jwt
 from fastapi import Request, HTTPException, status, Depends
@@ -18,7 +22,7 @@ def verify_token(token: str):
             algorithms=["RS256"]
         )
         return data
-    except jwt.exceptions.PyJWTError:
+    except Exception:
         return None
 
 async def get_current_user(request: Request):

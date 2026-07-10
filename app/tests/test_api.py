@@ -197,3 +197,69 @@ def test_fetch_fields_for_a_point(mock_auth):
         print(f"  -> Returned {len(fields_l1)} fields. First field MaskingLevel: {fields_l1[0]['MaskingLevel']}")
         assert fields_l1[0]["MaskingLevel"] == "L1"
     print("[TEST] test_fetch_fields_for_a_point SUCCESS\n")
+
+def test_network_error_degrades_to_l0():
+    print("\n\n[TEST] Starting test_network_error_degrades_to_l0")
+    with patch("app.auth.get_jwks_client") as mock_get_client:
+        mock_get_client.side_effect = Exception("Network Error")
+        
+        res = client.post(
+            "/register-field-boundary",
+            json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
+        )
+        data = res.json()
+        geo_id = data.get("Geo Id") or data.get("detail", {}).get("Geo Id")
+        if not geo_id:
+            geo_id = data.get("detail", {}).get("matched geo ids", [None])[0]
+        
+        res_fetch = client.get(f"/resolve/{geo_id}", headers={"Authorization": "Bearer some-token"})
+        assert res_fetch.status_code == 200
+        assert res_fetch.json()["MaskingLevel"] == "L0"
+    print("[TEST] test_network_error_degrades_to_l0 SUCCESS\n")
+
+def test_real_rs256_auth():
+    print("\n\n[TEST] Starting test_real_rs256_auth")
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    import jwt
+    
+    private_key1 = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
+    private_key2 = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
+    
+    token1 = jwt.encode({"sub": "test1"}, private_key1, algorithm="RS256")
+    token2 = jwt.encode({"sub": "test2"}, private_key2, algorithm="RS256")
+    
+    public_key1 = private_key1.public_key()
+    
+    class MockSigningKey:
+        def __init__(self, key):
+            self.key = key
+            
+    with patch("app.auth.get_jwks_client") as mock_get_client:
+        class MockClient:
+            def get_signing_key_from_jwt(self, token):
+                return MockSigningKey(public_key1)
+        mock_get_client.return_value = MockClient()
+        
+        res = client.post(
+            "/register-field-boundary",
+            json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
+        )
+        data = res.json()
+        geo_id = data.get("Geo Id") or data.get("detail", {}).get("Geo Id")
+        if not geo_id:
+            geo_id = data.get("detail", {}).get("matched geo ids", [None])[0]
+            
+        res1 = client.get(f"/resolve/{geo_id}", headers={"Authorization": f"Bearer {token1}"})
+        assert res1.status_code == 200
+        assert res1.json()["MaskingLevel"] == "L1"
+        
+        res2 = client.get(f"/resolve/{geo_id}", headers={"Authorization": f"Bearer {token2}"})
+        assert res2.status_code == 200
+        assert res2.json()["MaskingLevel"] == "L0"
+    print("[TEST] test_real_rs256_auth SUCCESS\n")
