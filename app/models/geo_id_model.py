@@ -7,7 +7,11 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+
+def get_utc_now():
+    return datetime.now(timezone.utc)
+
 from sqlalchemy import Column, String, Integer, Float, DateTime
 from sqlalchemy.dialects.postgresql import UUID, JSONB , ARRAY
 from app.database import Base
@@ -28,5 +32,5 @@ class GeoID(Base):
     geo_data = Column(JSONB) 
     crop = Column(String)
     mask_level = Column(String, default="L0")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_utc_now)
+    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now)

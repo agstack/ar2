@@ -7,6 +7,32 @@ import jwt
 from fastapi import Request, HTTPException, status, Depends
 from functools import lru_cache
 
+from app.grant_verifier import verify_sdjwt_grant
+
+@lru_cache()
+def get_issuer_pubkey():
+    key_path = os.getenv("AR_TRUSTED_ISSUER_PUBKEY")
+    if not key_path or not os.path.exists(key_path):
+        return None
+    with open(key_path, "rb") as f:
+        return f.read()
+
+def verify_field_grant(grant_token: str, requested_geoid: str) -> bool:
+    pubkey = get_issuer_pubkey()
+    if not pubkey:
+        return False
+    try:
+        test_dir = os.getenv("TEST_STATUS_LIST_DIR")
+        return verify_sdjwt_grant(
+            sd_jwt=grant_token,
+            public_key_pem=pubkey,
+            requested_geoid=requested_geoid,
+            local_status_list_path=test_dir
+        )
+    except Exception as e:
+        print(f"Grant verification failed ({e}). Falling back to L0.")
+        return False
+
 @lru_cache()
 def get_jwks_client():
     jwks_url = os.getenv("JWKS_URL")

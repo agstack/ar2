@@ -16,7 +16,7 @@ from app.models import GeoID
 from app.utils import Utils
 from app.schemas import FetchFieldResponse, OverlapRequest, FetchFieldsForPointRequest
 from app.s2_services import S2Service
-from app.auth import get_current_user, require_l1
+from app.auth import get_current_user, require_l1, verify_field_grant
 
 router = APIRouter(prefix="", tags=["Fetch Field"])
 
@@ -103,6 +103,7 @@ async def fetch_field(
     geo_id: str,
     s2_index: Optional[str] = Query(None, description="Comma-separated S2 levels to fetch (e.g., '13,20')"),
     user: dict | None = Depends(get_current_user),
+    x_field_grant: Optional[str] = Header(None, alias="X-Field-Grant"),
     db: Session = Depends(get_db)
 ):
     try:
@@ -118,8 +119,12 @@ async def fetch_field(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Field not found, invalid Geo Id."
             )
+        
+        has_l1 = user is not None
+        if not has_l1 and x_field_grant and verify_field_grant(x_field_grant, record.geo_id):
+            has_l1 = True
 
-        return apply_masking_logic(record, user, s2_index)
+        return apply_masking_logic(record, {"granted": True} if has_l1 else None, s2_index)
 
     except HTTPException:
         raise
@@ -131,7 +136,7 @@ async def fetch_field(
 
 
 @router.get("/fetch-field-wkt/{geo_id}", tags=["Field Fetch"])
-async def fetch_field_wkt(geo_id: str, user: dict | None = Depends(get_current_user), db: Session = Depends(get_db)):
+async def fetch_field_wkt(geo_id: str, user: dict | None = Depends(get_current_user), x_field_grant: Optional[str] = Header(None, alias="X-Field-Grant"), db: Session = Depends(get_db)):
     try:
         record = db.query(GeoID).filter(
             or_(GeoID.geo_id == geo_id, GeoID.geo_id_short == geo_id)
@@ -140,7 +145,11 @@ async def fetch_field_wkt(geo_id: str, user: dict | None = Depends(get_current_u
         if not record:
             raise HTTPException(status_code=404, detail="Field not found.")
             
-        if user:
+        has_l1 = user is not None
+        if not has_l1 and x_field_grant and verify_field_grant(x_field_grant, record.geo_id):
+            has_l1 = True
+
+        if has_l1:
             wkt = record.geo_data.get('wkt')
             masking_level = "L1"
         else:
@@ -161,7 +170,7 @@ async def fetch_field_wkt(geo_id: str, user: dict | None = Depends(get_current_u
 
 
 @router.get("/fetch-field-centroid/{geo_id}", tags=["Field Fetch"])
-async def fetch_field_centroid(geo_id: str, user: dict | None = Depends(get_current_user), db: Session = Depends(get_db)):
+async def fetch_field_centroid(geo_id: str, user: dict | None = Depends(get_current_user), x_field_grant: Optional[str] = Header(None, alias="X-Field-Grant"), db: Session = Depends(get_db)):
     try:
         record = db.query(GeoID).filter(
             or_(GeoID.geo_id == geo_id, GeoID.geo_id_short == geo_id)
@@ -176,7 +185,11 @@ async def fetch_field_centroid(geo_id: str, user: dict | None = Depends(get_curr
             
         centroid = Utils.fetch_field_centroid_by_wkt(field_wkt)
         
-        if user:
+        has_l1 = user is not None
+        if not has_l1 and x_field_grant and verify_field_grant(x_field_grant, record.geo_id):
+            has_l1 = True
+
+        if has_l1:
             return {
                 "message": "Centroid fetched successfully.",
                 "GEO Id": record.geo_id,
@@ -201,7 +214,7 @@ async def fetch_field_centroid(geo_id: str, user: dict | None = Depends(get_curr
         raise HTTPException(status_code=400, detail=f"Fetch Field Centroid Error: {str(e)}")
 
 @router.get("/geoid/{geo_id}/eudr-export", tags=["Field Fetch"])
-async def eudr_export(geo_id: str, user: dict = Depends(require_l1), db: Session = Depends(get_db)):
+async def eudr_export(geo_id: str, user: dict | None = Depends(get_current_user), x_field_grant: Optional[str] = Header(None, alias="X-Field-Grant"), db: Session = Depends(get_db)):
         
     try:
         record = db.query(GeoID).filter(
@@ -211,6 +224,16 @@ async def eudr_export(geo_id: str, user: dict = Depends(require_l1), db: Session
         if not record:
             raise HTTPException(status_code=404, detail="Field not found.")
             
+        has_l1 = user is not None
+        if not has_l1 and x_field_grant and verify_field_grant(x_field_grant, record.geo_id):
+            has_l1 = True
+            
+        if not has_l1:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="L1 authorization required"
+            )
+
         field_wkt = record.geo_data.get('wkt')
         if not field_wkt:
             raise HTTPException(status_code=500, detail="Stored geometry is missing WKT data.")

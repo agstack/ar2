@@ -1,6 +1,16 @@
+import os
+import json
 import pytest
 from fastapi.testclient import TestClient
+
+# Mock environment variables BEFORE importing app components
+TESTKIT_DIR = "/home/rajat/Downloads/rnaura_work/pancake/services/pancake_services/grants/testkit/dev_keys"
+os.environ["AR_TRUSTED_ISSUER_PUBKEY"] = os.path.join(TESTKIT_DIR, "dev_issuer_public.pem")
+os.environ["TEST_STATUS_LIST_DIR"] = TESTKIT_DIR
+
 from app.main import app
+from app.database import Base, engine, get_db, SessionLocal
+from app.models import GeoID
 from unittest.mock import patch
 
 client = TestClient(app)
@@ -263,3 +273,69 @@ def test_real_rs256_auth():
         assert res2.status_code == 200
         assert res2.json()["MaskingLevel"] == "L0"
     print("[TEST] test_real_rs256_auth SUCCESS\n")
+
+
+@pytest.fixture(scope="module")
+def setup_database():
+    db = SessionLocal()
+    
+    # We need to register a geoid matching the one in the credentials.
+    # From manifest.json, the first geoid is:
+    geoid_hex = "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f"
+    geo_data = {
+        "wkt": "POLYGON((0 0, 0 1, 1 1, 1 0, 0 0))" # Dummy
+    }
+    
+    test_field = GeoID(
+        geo_id=geoid_hex,
+        geo_id_short="3f1a9f0f",
+        content_hash="dummyhash",
+        country="TestCountry",
+        geo_data=geo_data,
+        mask_level="L0"
+    )
+    db.add(test_field)
+    db.commit()
+    
+    yield
+    db.delete(test_field)
+    db.commit()
+
+def get_token(name):
+    with open(os.path.join(TESTKIT_DIR, name)) as f:
+        return f.read().strip()
+
+def test_valid_grant(setup_database):
+    geoid = "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f"
+    token = get_token("valid.sdjwt")
+    res = client.get(f"/fetch-field/{geoid}", headers={"X-Field-Grant": token})
+    assert res.status_code == 200
+    assert res.json()["MaskingLevel"] == "L1"
+
+def test_expired_grant(setup_database):
+    geoid = "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f"
+    token = get_token("expired.sdjwt")
+    res = client.get(f"/fetch-field/{geoid}", headers={"X-Field-Grant": token})
+    assert res.status_code == 200
+    assert res.json()["MaskingLevel"] == "L0"
+
+def test_revoked_grant(setup_database):
+    geoid = "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f"
+    token = get_token("revoked.sdjwt")
+    res = client.get(f"/fetch-field/{geoid}", headers={"X-Field-Grant": token})
+    assert res.status_code == 200
+    assert res.json()["MaskingLevel"] == "L0"
+
+def test_tampered_grant(setup_database):
+    geoid = "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f"
+    token = get_token("tampered.sdjwt")
+    res = client.get(f"/fetch-field/{geoid}", headers={"X-Field-Grant": token})
+    assert res.status_code == 200
+    assert res.json()["MaskingLevel"] == "L0"
+
+def test_wrong_geoid_grant(setup_database):
+    geoid = "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f"
+    token = get_token("wrong_geoid.sdjwt")
+    res = client.get(f"/fetch-field/{geoid}", headers={"X-Field-Grant": token})
+    assert res.status_code == 200
+    assert res.json()["MaskingLevel"] == "L0"
