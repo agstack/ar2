@@ -58,3 +58,6 @@ legacy_app_for_endpoints.py
 masking_unmasking_old_example.py
 bulk_test_20800.geojson
 generate_synthetic_geojson.py
+demo_guide_local.md
+test_curls_local.txt
+manual_e2e_testing_guide.md

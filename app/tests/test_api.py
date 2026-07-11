@@ -4,7 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 # Mock environment variables BEFORE importing app components
-TESTKIT_DIR = "/home/rajat/Downloads/rnaura_work/pancake/services/pancake_services/grants/testkit/dev_keys"
+# Allow overriding TESTKIT_DIR, defaulting to a relative path assuming pancake is checked out next to ar2
+DEFAULT_TESTKIT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../pancake/services/pancake_services/grants/testkit/dev_keys"))
+TESTKIT_DIR = os.getenv("TESTKIT_DIR", DEFAULT_TESTKIT_DIR)
 os.environ["AR_TRUSTED_ISSUER_PUBKEY"] = os.path.join(TESTKIT_DIR, "dev_issuer_public.pem")
 os.environ["TEST_STATUS_LIST_DIR"] = TESTKIT_DIR
 
@@ -64,11 +66,18 @@ def test_register_and_fetch_field(mock_auth):
     assert res_l0_garbage.status_code == 200
     assert res_l0_garbage.json()["MaskingLevel"] == "L0"
     
-    print("  -> Step 4: Fetching /resolve endpoint with Valid Token (L1)")
+    print("  -> Step 4: Fetching /resolve endpoint with Valid Token (L0 without grant)")
     res_l1 = client.get(f"/resolve/{geo_id}", headers={"Authorization": "Bearer valid-token"})
     print(f"  <- Response Code: {res_l1.status_code}, MaskingLevel: {res_l1.json().get('MaskingLevel')}")
     assert res_l1.status_code == 200
-    assert res_l1.json()["MaskingLevel"] == "L1"
+    assert res_l1.json()["MaskingLevel"] == "L0"
+    
+    print("  -> Step 5: Fetching with Valid Token in AR_ACCOUNT_L1=legacy mode (L1)")
+    os.environ["AR_ACCOUNT_L1"] = "legacy"
+    res_l1_leg = client.get(f"/resolve/{geo_id}", headers={"Authorization": "Bearer valid-token"})
+    assert res_l1_leg.status_code == 200
+    assert res_l1_leg.json()["MaskingLevel"] == "L1"
+    os.environ.pop("AR_ACCOUNT_L1", None)
     print("[TEST] test_register_and_fetch_field SUCCESS")
 
 def test_fetch_field_wkt(mock_auth):
@@ -88,12 +97,10 @@ def test_fetch_field_wkt(mock_auth):
     assert res_l0.status_code == 200
     assert res_l0.json()["WKT"] is None
     
-    print("  -> Fetching WKT with Valid Token (should return exact WKT)")
+    print("  -> Fetching WKT with Valid Token (should return None because no grant)")
     res_l1 = client.get(f"/fetch-field-wkt/{geo_id}", headers={"Authorization": "Bearer valid-token"})
-    wkt_snippet = res_l1.json().get('WKT')[:30] + "..." if res_l1.json().get('WKT') else "None"
-    print(f"  <- Response Code: {res_l1.status_code}, WKT received: {wkt_snippet}")
     assert res_l1.status_code == 200
-    assert res_l1.json()["WKT"] == TEST_POLYGON_WKT
+    assert res_l1.json()["WKT"] is None
     print("[TEST] test_fetch_field_wkt SUCCESS")
 
 def test_eudr_export(mock_auth):
@@ -117,11 +124,9 @@ def test_eudr_export(mock_auth):
     print(f"  <- Response Code: {res_l0_garbage.status_code}, Detail: {res_l0_garbage.json().get('detail')}")
     assert res_l0_garbage.status_code == 401
 
-    print("  -> Testing EUDR Export with valid token (should succeed with L1)")
+    print("  -> Testing EUDR Export with valid token (should fail with 401)")
     res_l1 = client.get(f"/geoid/{geo_id}/eudr-export", headers={"Authorization": "Bearer valid-token"})
-    print(f"  <- Response Code: {res_l1.status_code}, MaskingLevel: {res_l1.json().get('MaskingLevel')}")
-    assert res_l1.status_code == 200
-    assert res_l1.json()["MaskingLevel"] == "L1"
+    assert res_l1.status_code == 401
     print("[TEST] test_eudr_export SUCCESS")
 
 def test_fetch_field_centroid(mock_auth):
@@ -141,11 +146,10 @@ def test_fetch_field_centroid(mock_auth):
     assert res_l0.status_code == 200
     assert res_l0.json()["MaskingLevel"] == "L0"
     
-    print("  -> Fetching centroid with valid token (should return L1 exact centroid)")
+    print("  -> Fetching centroid with valid token (should return L0 masked centroid)")
     res_l1 = client.get(f"/fetch-field-centroid/{geo_id}", headers={"Authorization": "Bearer valid-token"})
-    print(f"  <- Response Code: {res_l1.status_code}, MaskingLevel: {res_l1.json().get('MaskingLevel')}, Centroid: {res_l1.json().get('Centroid')}")
     assert res_l1.status_code == 200
-    assert res_l1.json()["MaskingLevel"] == "L1"
+    assert res_l1.json()["MaskingLevel"] == "L0" 
     print("[TEST] test_fetch_field_centroid SUCCESS")
 
 def test_register_duplicate_point():
@@ -267,7 +271,13 @@ def test_real_rs256_auth():
             
         res1 = client.get(f"/resolve/{geo_id}", headers={"Authorization": f"Bearer {token1}"})
         assert res1.status_code == 200
-        assert res1.json()["MaskingLevel"] == "L1"
+        assert res1.json()["MaskingLevel"] == "L0"
+        
+        os.environ["AR_ACCOUNT_L1"] = "legacy"
+        res1_leg = client.get(f"/resolve/{geo_id}", headers={"Authorization": f"Bearer {token1}"})
+        assert res1_leg.status_code == 200
+        assert res1_leg.json()["MaskingLevel"] == "L1"
+        os.environ.pop("AR_ACCOUNT_L1", None)
         
         res2 = client.get(f"/resolve/{geo_id}", headers={"Authorization": f"Bearer {token2}"})
         assert res2.status_code == 200
@@ -325,6 +335,9 @@ def test_revoked_grant(setup_database):
     res = client.get(f"/fetch-field/{geoid}", headers={"X-Field-Grant": token})
     assert res.status_code == 200
     assert res.json()["MaskingLevel"] == "L0"
+    
+    res_eudr = client.get(f"/geoid/{geoid}/eudr-export", headers={"X-Field-Grant": token})
+    assert res_eudr.status_code == 401
 
 def test_tampered_grant(setup_database):
     geoid = "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f"
@@ -339,3 +352,24 @@ def test_wrong_geoid_grant(setup_database):
     res = client.get(f"/fetch-field/{geoid}", headers={"X-Field-Grant": token})
     assert res.status_code == 200
     assert res.json()["MaskingLevel"] == "L0"
+
+def test_valid_grant_fetch_wkt(setup_database):
+    geoid = "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f"
+    token = get_token("valid.sdjwt")
+    res = client.get(f"/fetch-field-wkt/{geoid}", headers={"X-Field-Grant": token})
+    assert res.status_code == 200
+    assert res.json().get("WKT") is not None
+
+def test_valid_grant_eudr_export(setup_database):
+    geoid = "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f"
+    token = get_token("valid.sdjwt")
+    res = client.get(f"/geoid/{geoid}/eudr-export", headers={"X-Field-Grant": token})
+    assert res.status_code == 200
+    assert "GEO Id" in res.json()
+
+def test_valid_grant_fetch_centroid(setup_database):
+    geoid = "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f"
+    token = get_token("valid.sdjwt")
+    res = client.get(f"/fetch-field-centroid/{geoid}", headers={"X-Field-Grant": token})
+    assert res.status_code == 200
+    assert res.json()["MaskingLevel"] == "L1"

@@ -1,157 +1,160 @@
 #!/bin/bash
 # demo_e2e.sh
 # End-to-end automated demo of the AgStack DPI Field Access Grant lifecycle.
+# Architecture: Owner is the first grantee & Hub proxies all traffic.
 
 set -e
 
 AR_HUB_URL="http://127.0.0.1:8000"
-AR_NODE_URL="http://127.0.0.1:8001"
 PANCAKE_URL="http://127.0.0.1:8100"
 
-echo "========================================"
-echo "          VERSION 1: DIRECT TO AR NODE  "
-echo "========================================"
+JSON() {
+  # usage: echo '{"a": "b"}' | JSON "['a']"
+  python3 -c "import sys,json; d=json.load(sys.stdin); print(d$1)"
+}
 
-echo "1. Logging into AR Hub"
-LOGIN_RES=$(curl -s -X POST "$AR_HUB_URL/users/login" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=test_user@gmail.com&password=test@12345")
-
-HUB_TOKEN=$(echo "$LOGIN_RES" | grep -oP '"access_token":\s*"\K[^"]+')
-if [ -z "$HUB_TOKEN" ]; then
-    echo "Login failed. Ensure AR Hub is running on $AR_HUB_URL."
+expect() {
+  # usage: expect "Label" "actual" "expected"
+  if [ "$2" = "$3" ]; then
+    echo "  PASS: $1 = $2"
+  else
+    echo "  FAIL: $1 = $2 (wanted $3)"
     exit 1
-fi
-echo "Successfully logged in. Hub Token acquired."
+  fi
+}
+
+echo "=========================================================="
+echo " AgStack DPI Demo: 2-Persona Flow (Through Hub Gateway)"
+echo "=========================================================="
+
+echo ""
+echo "1. Registering & Authenticating Personas (Farmer & Buyer)"
+
+# Attempt registration (ignore failures if they already exist)
+curl -s -X POST "$AR_HUB_URL/users/register" -H "Content-Type: application/json" \
+  -d '{"first_name": "Flora", "last_name": "Farmer", "email": "farmer@demo.agstack.org", "phone": "+50400000001", "password": "Demo#Farmer1", "role": "farmer", "country": "USA"}' > /dev/null || true
+curl -s -X POST "$AR_HUB_URL/users/register" -H "Content-Type: application/json" \
+  -d '{"first_name": "Bob", "last_name": "Buyer", "email": "buyer@demo.agstack.org", "phone": "+50400000002", "password": "Demo#Buyer1", "role": "buyer", "country": "USA"}' > /dev/null || true
+
+FARMER_LOGIN=$(curl -s -X POST "$AR_HUB_URL/users/login" -H "Content-Type: application/x-www-form-urlencoded" -d "username=farmer@demo.agstack.org&password=Demo%23Farmer1")
+FARMER_TOKEN=$(echo "$FARMER_LOGIN" | JSON "['access_token']")
+if [ -z "$FARMER_TOKEN" ] || [ "$FARMER_TOKEN" = "None" ]; then echo "Farmer login failed."; exit 1; fi
+
+BUYER_LOGIN=$(curl -s -X POST "$AR_HUB_URL/users/login" -H "Content-Type: application/x-www-form-urlencoded" -d "username=buyer@demo.agstack.org&password=Demo%23Buyer1")
+BUYER_TOKEN=$(echo "$BUYER_LOGIN" | JSON "['access_token']")
+if [ -z "$BUYER_TOKEN" ] || [ "$BUYER_TOKEN" = "None" ]; then echo "Buyer login failed."; exit 1; fi
+
+echo "  PASS: Both personas authenticated."
 echo ""
 
-echo "2. Registering Field on AR Node (Direct)"
-WKT="POLYGON((-115.11287927627565 32.401601610730026,-115.11332988739014 32.39794898464963,-115.11252522468568 32.397414220539915,-115.11190295219423 32.397541114005094,-115.11085152626039 32.39765894349167,-115.10995030403139 32.39849280930963,-115.10892033576967 32.398909739330705,-115.1090168952942 32.401764751871625,-115.11287927627565 32.401601610730026))"
+echo "2. Farmer Registers a Field (Authenticated via Hub)"
+WKT="POLYGON((-119.48387145996094 36.40810420514039,-119.48382854461671 36.40449287165274,-119.4750738143921 36.40452743066338,-119.4751811027527 36.408052369005034,-119.48387145996094 36.40810420514039))"
 
-REG_RES=$(curl -s -X POST "$AR_NODE_URL/register-field-boundary" \
-  -H "accept: application/json" \
+REG_RES=$(curl -s -X POST "$AR_HUB_URL/register-field-boundary" \
+  -H "Authorization: Bearer $FARMER_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"wkt\": \"$WKT\", \"threshold\": 95, \"return_s2_indices\": false}")
 
-GEOID=$(echo "$REG_RES" | grep -oP '"Geo Id":\s*"\K[^"]+')
-echo "Registered Field. GeoID: $GEOID"
+GEOID=$(echo "$REG_RES" | JSON "['Geo Id']")
+if [ "$GEOID" = "None" ]; then
+    # Handle duplicate registration
+    GEOID=$(echo "$REG_RES" | JSON "['detail']['matched geo ids'][0]")
+fi
+echo "  Registered Field GeoID: $GEOID"
 echo ""
 
-echo "3. Creating FieldList on Pancake"
+echo "3. Farmer Creates FieldList on Pancake"
 LIST_RES=$(curl -s -X POST "$PANCAKE_URL/fieldlists" \
-  -H "Authorization: Bearer $HUB_TOKEN" \
+  -H "Authorization: Bearer $FARMER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"name\": \"Automated Test Field\", \"geoids\": [\"$GEOID\"]}")
+  -d "{\"name\": \"Farmer Owned Field\", \"geoids\": [\"$GEOID\"]}")
 
-LIST_ID=$(echo "$LIST_RES" | grep -oP '"list_id":\s*"\K[^"]+')
-echo "Created ListID: $LIST_ID"
+LIST_ID=$(echo "$LIST_RES" | JSON "['list_id']")
+echo "  Created ListID: $LIST_ID"
 echo ""
 
-echo "4. Issuing Grant on Pancake"
-ISSUE_RES=$(curl -s -X POST "$PANCAKE_URL/grants/issue" \
-  -H "Authorization: Bearer $HUB_TOKEN" \
+echo "4. Farmer self-issues 'Owner Grant' (1 year validity)"
+OWNER_ISSUE_RES=$(curl -s -X POST "$PANCAKE_URL/grants/issue" \
+  -H "Authorization: Bearer $FARMER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"list_id\": \"$LIST_ID\", \"grantee_account\": \"test_user@gmail.com\", \"purpose\": \"eudr-due-diligence\", \"validity_days\": 1}")
+  -d "{\"list_id\": \"$LIST_ID\", \"grantee_account\": \"farmer@demo.agstack.org\", \"purpose\": \"owner\", \"validity_days\": 365}")
 
-GRANT_ID=$(echo "$ISSUE_RES" | grep -oP '"jti":\s*"\K[^"]+')
-echo "Issued Grant ID: $GRANT_ID"
+OWNER_GRANT_ID=$(echo "$OWNER_ISSUE_RES" | JSON "['jti']")
+OWNER_RCV_RES=$(curl -s -X GET "$PANCAKE_URL/grants/received" -H "Authorization: Bearer $FARMER_TOKEN")
+OWNER_CREDENTIAL=$(echo "$OWNER_RCV_RES" | python3 -c "import sys,json; print(next(g['credential'] for g in json.load(sys.stdin) if g['jti'] == '$OWNER_GRANT_ID'))")
+echo "  Owner Grant Issued: $OWNER_GRANT_ID"
 echo ""
 
-echo "5. Retrieving SD-JWT Credential"
-RCV_RES=$(curl -s -X GET "$PANCAKE_URL/grants/received" \
-  -H "Authorization: Bearer $HUB_TOKEN")
-
-GRANT_TOKEN=$(echo "$RCV_RES" | grep -oP '"credential":\s*"\K[^"]+' | head -n 1)
-echo "Successfully fetched SD-JWT grant credential from Pancake."
+echo "5. Farmer checks their own L1 Access with Owner Credential"
+OWNER_FETCH=$(curl -s -X GET "$AR_HUB_URL/fetch-field-wkt/$GEOID" \
+  -H "X-Field-Grant: $OWNER_CREDENTIAL")
+expect "Farmer Owner Credential Level" "$(echo "$OWNER_FETCH" | JSON "['MaskingLevel']")" "L1"
 echo ""
 
-echo "6. Fetch Field with Grant (Expect L1 - Direct)"
-L1_RESPONSE=$(curl -s -X GET "$AR_NODE_URL/fetch-field-wkt/$GEOID" \
-  -H "accept: application/json" \
-  -H "X-Field-Grant: $GRANT_TOKEN")
-echo "$L1_RESPONSE" | grep -o '"MaskingLevel":"[^"]*"' || true
-echo ""
-
-echo "7. Revoke Grant on Pancake"
-curl -s -X POST "$PANCAKE_URL/grants/revoke" \
-  -H "Authorization: Bearer $HUB_TOKEN" \
+echo "6. Farmer issues 'EUDR Grant' to Buyer"
+BUYER_ISSUE_RES=$(curl -s -X POST "$PANCAKE_URL/grants/issue" \
+  -H "Authorization: Bearer $FARMER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"jti\": \"$GRANT_ID\"}" > /dev/null
-echo "Grant $GRANT_ID revoked in the StatusList2021 registry."
+  -d "{\"list_id\": \"$LIST_ID\", \"grantee_account\": \"buyer@demo.agstack.org\", \"purpose\": \"eudr-due-diligence\", \"validity_days\": 1}")
+
+BUYER_GRANT_ID=$(echo "$BUYER_ISSUE_RES" | JSON "['jti']")
+BUYER_RCV=$(curl -s -X GET "$PANCAKE_URL/grants/received" -H "Authorization: Bearer $BUYER_TOKEN")
+BUYER_CREDENTIAL=$(echo "$BUYER_RCV" | python3 -c "import sys,json; print(next(g['credential'] for g in json.load(sys.stdin) if g['jti'] == '$BUYER_GRANT_ID'))")
+echo "  Buyer Grant Issued: $BUYER_GRANT_ID"
 echo ""
 
-echo "8. Fetch Field with Revoked Grant (Expect L0 - Direct)"
-L0_RESPONSE=$(curl -s -X GET "$AR_NODE_URL/fetch-field-wkt/$GEOID" \
-  -H "accept: application/json" \
-  -H "X-Field-Grant: $GRANT_TOKEN")
-echo "$L0_RESPONSE" | grep -o '"MaskingLevel":"[^"]*"' || true
+echo "7. Buyer fetches field with their Grant (Expect L1)"
+BUYER_FETCH=$(curl -s -X GET "$AR_HUB_URL/fetch-field-wkt/$GEOID" \
+  -H "X-Field-Grant: $BUYER_CREDENTIAL")
+expect "Buyer Credential Level" "$(echo "$BUYER_FETCH" | JSON "['MaskingLevel']")" "L1"
 echo ""
 
+echo "8. 3-Way Split Assertions"
+FARMER_BARE_FETCH=$(curl -s -X GET "$AR_HUB_URL/fetch-field-wkt/$GEOID" -H "Authorization: Bearer $FARMER_TOKEN")
+expect "Farmer Bare JWT Level" "$(echo "$FARMER_BARE_FETCH" | JSON "['MaskingLevel']")" "L0"
 
-echo "========================================"
-echo "          VERSION 2: THROUGH HUB ONLY   "
-echo "========================================"
+ANON_FETCH=$(curl -s -X GET "$AR_HUB_URL/fetch-field-wkt/$GEOID")
+expect "Anonymous Level" "$(echo "$ANON_FETCH" | JSON "['MaskingLevel']")" "L0"
+echo ""
 
-echo "1. Registering Field via AR Hub (No Auth)"
-WKT2="POLYGON((-119.70914483070375 36.621719124665596,-119.70914483070375 36.61996153472247,-119.7047245502472 36.61993568751255,-119.70475673675537 36.62173635574118,-119.70914483070375 36.621719124665596))"
+echo "9. EUDR Export Check (Buyer with Grant)"
+EUDR_RES=$(curl -s -w "%{http_code}" -o /tmp/eudr_res.json -X GET "$AR_HUB_URL/geoid/$GEOID/eudr-export" \
+  -H "X-Field-Grant: $BUYER_CREDENTIAL")
+expect "EUDR Success Code" "$EUDR_RES" "200"
+echo ""
 
-REG_RES2=$(curl -s -X POST "$AR_HUB_URL/register-field-boundary" \
-  -H "accept: application/json" \
+echo "10. Revoke Buyer Grant"
+REVOKE_RES=$(curl -s -w "\n%{http_code}" -X POST "$PANCAKE_URL/grants/revoke" \
+  -H "Authorization: Bearer $FARMER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"wkt\": \"$WKT2\", \"threshold\": 95, \"return_s2_indices\": false}")
-
-GEOID2=$(echo "$REG_RES2" | grep -oP '"Geo Id":\s*"\K[^"]+')
-echo "Registered Field via Hub. GeoID: $GEOID2"
+  -d "{\"jti\": \"$BUYER_GRANT_ID\"}")
+REVOKE_HTTP=$(echo "$REVOKE_RES" | tail -n1)
+REVOKE_BODY=$(echo "$REVOKE_RES" | sed '$d')
+echo "  Revoke Response Code: $REVOKE_HTTP"
+echo "  Revoke Response Body: $REVOKE_BODY"
+if [ "$REVOKE_HTTP" != "200" ]; then
+    echo "  FAIL: Revocation failed."
+    exit 1
+fi
+echo "  Buyer grant $BUYER_GRANT_ID revoked."
 echo ""
 
-echo "2. Creating FieldList on Pancake"
-LIST_RES2=$(curl -s -X POST "$PANCAKE_URL/fieldlists" \
-  -H "Authorization: Bearer $HUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\": \"Hub Routed Test Field\", \"geoids\": [\"$GEOID2\"]}")
+echo "11. Post-Revocation Checks"
+sleep 2
+BUYER_FETCH_REVOKED=$(curl -s -X GET "$AR_HUB_URL/fetch-field-wkt/$GEOID" \
+  -H "X-Field-Grant: $BUYER_CREDENTIAL")
+expect "Buyer Revoked Level" "$(echo "$BUYER_FETCH_REVOKED" | JSON "['MaskingLevel']")" "L0"
 
-LIST_ID2=$(echo "$LIST_RES2" | grep -oP '"list_id":\s*"\K[^"]+')
-echo "Created ListID: $LIST_ID2"
+EUDR_REVOKED_RES=$(curl -s -w "%{http_code}" -o /tmp/eudr_rev.json -X GET "$AR_HUB_URL/geoid/$GEOID/eudr-export" \
+  -H "X-Field-Grant: $BUYER_CREDENTIAL")
+expect "EUDR Revoked Code" "$EUDR_REVOKED_RES" "401"
+
+OWNER_FETCH_AFTER=$(curl -s -X GET "$AR_HUB_URL/fetch-field-wkt/$GEOID" \
+  -H "X-Field-Grant: $OWNER_CREDENTIAL")
+expect "Farmer Owner Credential Level (Intact)" "$(echo "$OWNER_FETCH_AFTER" | JSON "['MaskingLevel']")" "L1"
+
 echo ""
-
-echo "3. Issuing Grant on Pancake"
-ISSUE_RES2=$(curl -s -X POST "$PANCAKE_URL/grants/issue" \
-  -H "Authorization: Bearer $HUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"list_id\": \"$LIST_ID2\", \"grantee_account\": \"test_user@gmail.com\", \"purpose\": \"eudr-due-diligence\", \"validity_days\": 1}")
-
-GRANT_ID2=$(echo "$ISSUE_RES2" | grep -oP '"jti":\s*"\K[^"]+')
-echo "Issued Grant ID: $GRANT_ID2"
-echo ""
-
-echo "4. Retrieving SD-JWT Credential"
-RCV_RES2=$(curl -s -X GET "$PANCAKE_URL/grants/received" \
-  -H "Authorization: Bearer $HUB_TOKEN")
-
-GRANT_TOKEN2=$(echo "$RCV_RES2" | grep -oP '"credential":\s*"\K[^"]+' | head -n 1)
-echo "Successfully fetched SD-JWT grant credential from Pancake."
-echo ""
-
-echo "5. Fetch Field with Grant (Expect L1 - Routed Through Hub)"
-L1_RESPONSE2=$(curl -s -X GET "$AR_HUB_URL/fetch-field-wkt/$GEOID2" \
-  -H "accept: application/json" \
-  -H "X-Field-Grant: $GRANT_TOKEN2")
-echo "$L1_RESPONSE2" | grep -o '"MaskingLevel":"[^"]*"' || true
-echo ""
-
-echo "6. Revoke Grant on Pancake"
-curl -s -X POST "$PANCAKE_URL/grants/revoke" \
-  -H "Authorization: Bearer $HUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"jti\": \"$GRANT_ID2\"}" > /dev/null
-echo "Grant $GRANT_ID2 revoked in the StatusList2021 registry."
-echo ""
-
-echo "7. Fetch Field with Revoked Grant (Expect L0 - Routed Through Hub)"
-L0_RESPONSE2=$(curl -s -X GET "$AR_HUB_URL/fetch-field-wkt/$GEOID2" \
-  -H "accept: application/json" \
-  -H "X-Field-Grant: $GRANT_TOKEN2")
-echo "$L0_RESPONSE2" | grep -o '"MaskingLevel":"[^"]*"' || true
-echo ""
-
-echo "Demo complete."
+echo "=========================================================="
+echo " ALL EXPECTATIONS PASSED. DEMO COMPLETE."
+echo "=========================================================="
+exit 0

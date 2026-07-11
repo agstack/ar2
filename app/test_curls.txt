@@ -1,12 +1,16 @@
-# STEP 1: Start the server
+# ==========================================
+# AR2 (NODE) CURL TESTING GUIDE
+# ==========================================
 
-uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+# STEP 1: Run the Server
+source ar-env/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-# ---------------------------------------------------------
-# REGISTRATION
-# ---------------------------------------------------------
-# STEP 2: Register a Field Boundary
-# Returns both Geo Id (64-char) and Geo Id Short (16-char)
+# ==========================================
+# REGISTRATION ENDPOINTS
+# ==========================================
+
+# Register a single Field Boundary
 curl -X 'POST' 'http://127.0.0.1:8000/register-field-boundary' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
@@ -16,152 +20,58 @@ curl -X 'POST' 'http://127.0.0.1:8000/register-field-boundary' \
   "return_s2_indices": false
 }'
 
-curl -X 'POST' 'http://127.0.0.1:8000/register-field-boundary' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "wkt": "POLYGON((76.57410085201265 31.024589817395512,76.57411694526674 31.02405167330459,76.57470166683198 31.024037874698173,76.57471239566804 31.02454842180414,76.57410085201265 31.024589817395512))",
-  "threshold": 95,
-  "return_s2_indices": false
-}'
-
-
-
-# NOTE: Copy the "Geo Id" and "Geo Id Short" from the response. Replace <GEO_ID> and <GEO_ID_SHORT> below with these values.
-
-# ---------------------------------------------------------
-# FETCHING & MASKING (/resolve)
-# ---------------------------------------------------------
-# STEP 3: Test L0 Masked View (Public) - /resolve endpoint
-# This should return MaskingLevel: L0, and Geo JSON should be a level-10 S2 cell.
-curl -X 'GET' 'http://127.0.0.1:8000/resolve/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' -H 'accept: application/json'
-
-# STEP 4: Test L1 Full View (Authorized) - /resolve endpoint
-# This should return MaskingLevel: L1, and the exact registered geometry.
-curl -X 'GET' 'http://127.0.0.1:8000/resolve/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer dummy-token'
-
-curl -X 'GET' 'http://127.0.0.1:8000/resolve/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w'
-
-# ---------------------------------------------------------
-# FETCHING & MASKING (/fetch-field)
-# ---------------------------------------------------------
-# STEP 5: Test L0 Masked View (Public) - /fetch-field endpoint
-curl -X 'GET' 'http://127.0.0.1:8000/fetch-field/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' -H 'accept: application/json'
-
-# STEP 6: Test L1 Full View (Authorized) - /fetch-field endpoint
-curl -X 'GET' 'http://127.0.0.1:8000/fetch-field/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer dummy-token'
-
-
-curl -X 'GET' 'http://127.0.0.1:8000/fetch-field/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w'
-
-eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w
-
-# ---------------------------------------------------------
-# FETCHING & MASKING WKT (/fetch-field-wkt)
-# ---------------------------------------------------------
-# STEP 7: Test L0 Masked View (Public) - /fetch-field-wkt endpoint
-# WKT should be null, MaskingLevel should be L0
-curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-wkt/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' -H 'accept: application/json'
-
-# STEP 8: Test L1 Full View (Authorized) - /fetch-field-wkt endpoint
-# WKT should be the full string, MaskingLevel should be L1
-curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-wkt/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w'
-
-# ---------------------------------------------------------
-# EUDR EXPORT
-# ---------------------------------------------------------
-# STEP 9: Test EUDR Export Without Authorization (Should fail with 401 Unauthorized)
-curl -X 'GET' 'http://127.0.0.1:8000/geoid/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a/eudr-export' \
-  -H 'accept: application/json'
-
-# STEP 10: Test EUDR Export (Requires Authorization)
-# Returns MultiPolygon in EPSG:4326, 6-decimal precision, proper ring winding.
-curl -X 'GET' 'http://127.0.0.1:8000/geoid/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a/eudr-export' \
-  -H 'accept: application/json' \
-  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w'
-
-# ---------------------------------------------------------
-# OTHER FETCH ENDPOINTS
-# ---------------------------------------------------------
-# STEP 11: Translate GeoID to Short
-curl -X 'GET' 'http://127.0.0.1:8000/translate-geoid-to-short/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' -H 'accept: application/json'
-
-# STEP 12: Translate GeoID Short to Full
-curl -X 'GET' 'http://127.0.0.1:8000/translate-geoid-to-full/ddeb15879afc7b3f' -H 'accept: application/json'
-
-# STEP 13: Fetch Field Centroid
-curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-centroid/91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a' -H 'accept: application/json' \
--H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6Imh1Yi1rZXktMSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWphdC5ybmF1cmFAZ21haWwuY29tIiwidHlwZSI6ImFjY2VzcyIsImV4cCI6MTc4MzY3ODk4NX0.ObxRawYkwg90PKNPTMCHSBdxq87N98_AdcYToqthZDFwQwfct5fTbBb0svOM9JFNKHOrjj8yDlMQyU9e0RouNBNhyk4wotRMujAeOn0L9yhlR7gtBgFHeJRkj6MKHadvNG7GfaQr_1pDKPpwL_tV9Flqf0-07s-_rqdeDBztOQZuyF95J4XA8Qidxrz1R34cGOoUZtOqKRTrif_QXckmn3xb323BKXtKVLMfacKdNkOQQU5tgR1_VcJpH2_IyF_-t14hFDCs2aRKnsou8cTCto_M-w3e4oxVOIepqxb3TVjhuAg8LIt8OndJX4xJvSGLwn4BISKn7nmNHmjwNRcp8w'
-
-# ---------------------------------------------------------
-# BULK & POINT REGISTRATIONS
-# ---------------------------------------------------------
-# STEP 14: Register Point
-curl -X 'POST' 'http://127.0.0.1:8000/register-point' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "wkt": "POINT (76.5720 31.0218)",
-  "field_name": "My Point"
-}'
-
-# STEP 15: Bulk Field Registration via GeoJSON (Files)
+# Bulk Register Field Boundaries (GeoJSON File)
 curl -X 'POST' 'http://127.0.0.1:8000/register-field-boundaries-geojson' \
   -H 'accept: application/json' \
-  -F 'file=@/home/rajat/Downloads/rnaura_work/ar2/app/example_fields_geojson_format.geojson'
+  -F 'file=@example_fields_geojson_format.geojson'
 
-# STEP 16: Bulk Point Registration via GeoJSON (Files)
+# Bulk Register Points (GeoJSON File)
 curl -X 'POST' 'http://127.0.0.1:8000/register-points-geojson' \
   -H 'accept: application/json' \
-  -H 'AUTOMATED-FIELD: 0' \
-  -F 'file=@/home/rajat/Downloads/rnaura_work/ar2/app/example_points_geojson_format.geojson'
+  -F 'file=@example_points_geojson_format.geojson'
 
-# ---------------------------------------------------------
-# ANALYTICS & MISC
-# ---------------------------------------------------------
-# STEP 17: Get percentage overlap
-curl -X 'POST' 'http://127.0.0.1:8000/get-percentage-overlap-two-fields' \
+# ==========================================
+# FETCH & RESOLVE ENDPOINTS
+# ==========================================
+# Note: Replace <GEO_ID> with the ID returned from registration.
+# Note: Replace <GRANT_TOKEN> with a valid ODRL JWT credential.
+
+# Resolve Geo ID (L0 Masked - No Auth)
+curl -X 'GET' 'http://127.0.0.1:8000/resolve/<GEO_ID>' -H 'accept: application/json'
+
+# Fetch Field Boundary (L1 - Requires Grant)
+curl -X 'GET' 'http://127.0.0.1:8000/fetch-field/<GEO_ID>' \
   -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "geo_id_field_1": "91da02c5ceb88f879d17ea4d9e9fe3697699c5dc0cc55b56d05d51f6c34a237a",
-  "geo_id_field_2": "26d1138edf7897a40744488a17cd0d836e8bbb82db98216ee073642dacb036c2"
-}'
+  -H 'X-Field-Grant: <GRANT_TOKEN>'
 
-# STEP 18: Fetch fields for a point
+# Fetch WKT directly (L1 - Requires Grant)
+curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-wkt/<GEO_ID>' \
+  -H 'accept: application/json' \
+  -H 'X-Field-Grant: <GRANT_TOKEN>'
+
+# Fetch Centroid (L1 - Requires Grant)
+curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-centroid/<GEO_ID>' \
+  -H 'accept: application/json' \
+  -H 'X-Field-Grant: <GRANT_TOKEN>'
+
+# ==========================================
+# EUDR COMPLIANCE ENDPOINTS
+# ==========================================
+
+# Generate EUDR Export (L1 - Requires Grant)
+curl -X 'GET' 'http://127.0.0.1:8000/geoid/<GEO_ID>/eudr-export' \
+  -H 'accept: application/json' \
+  -H 'X-Field-Grant: <GRANT_TOKEN>'
+
+# ==========================================
+# ANALYTICS & MISC
+# ==========================================
+
+# Fetch fields for a point
 curl -X 'POST' 'http://127.0.0.1:8000/fetch-fields-for-a-point' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
-  "latitude": 30.907400000000003,
-  "longitude": 75.78740000000002,
-  "s2_index": "13,20"
-}'
-
-curl -X 'GET' 'http://127.0.0.1:8000/fetch-registered-field-count' -H 'accept: application/json'
-
-curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-count-by-country' -H 'accept: application/json'
-
-curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-count-by-month' -H 'accept: application/json'
-
-# test endpoints pytest
-source ar-env/bin/activate && PYTHONPATH=. pytest app/tests/test_api.py -v -s
-
-curl -X 'POST' 'http://127.0.0.1:8001/register-field-boundary' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "wkt": "POLYGON ((76.57207310199738 31.02188526513206,76.57203555107118 31.021319507765583,76.572362780571 31.021319507765583,76.57239496707916 31.02189446441107,76.57207310199738 31.02188526513206))",
-  "threshold": 95,
-  "return_s2_indices": false
+  "latitude": 30.9074,
+  "longitude": 75.7874
 }'
