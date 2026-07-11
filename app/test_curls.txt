@@ -1,0 +1,77 @@
+# ==========================================
+# AR2 (NODE) CURL TESTING GUIDE
+# ==========================================
+
+# STEP 1: Run the Server
+source ar-env/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# ==========================================
+# REGISTRATION ENDPOINTS
+# ==========================================
+
+# Register a single Field Boundary
+curl -X 'POST' 'http://127.0.0.1:8000/register-field-boundary' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "wkt": "POLYGON ((76.57207310199738 31.02188526513206,76.57203555107118 31.021319507765583,76.572362780571 31.021319507765583,76.57239496707916 31.02189446441107,76.57207310199738 31.02188526513206))",
+  "threshold": 95,
+  "return_s2_indices": false
+}'
+
+# Bulk Register Field Boundaries (GeoJSON File)
+curl -X 'POST' 'http://127.0.0.1:8000/register-field-boundaries-geojson' \
+  -H 'accept: application/json' \
+  -F 'file=@example_fields_geojson_format.geojson'
+
+# Bulk Register Points (GeoJSON File)
+curl -X 'POST' 'http://127.0.0.1:8000/register-points-geojson' \
+  -H 'accept: application/json' \
+  -F 'file=@example_points_geojson_format.geojson'
+
+# ==========================================
+# FETCH & RESOLVE ENDPOINTS
+# ==========================================
+# Note: Replace <GEO_ID> with the ID returned from registration.
+# Note: Replace <GRANT_TOKEN> with a valid ODRL JWT credential.
+
+# Resolve Geo ID (L0 Masked - No Auth)
+curl -X 'GET' 'http://127.0.0.1:8000/resolve/<GEO_ID>' -H 'accept: application/json'
+
+# Fetch Field Boundary (L1 - Requires Grant)
+curl -X 'GET' 'http://127.0.0.1:8000/fetch-field/<GEO_ID>' \
+  -H 'accept: application/json' \
+  -H 'X-Field-Grant: <GRANT_TOKEN>'
+
+# Fetch WKT directly (L1 - Requires Grant)
+curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-wkt/<GEO_ID>' \
+  -H 'accept: application/json' \
+  -H 'X-Field-Grant: <GRANT_TOKEN>'
+
+# Fetch Centroid (L1 - Requires Grant)
+curl -X 'GET' 'http://127.0.0.1:8000/fetch-field-centroid/<GEO_ID>' \
+  -H 'accept: application/json' \
+  -H 'X-Field-Grant: <GRANT_TOKEN>'
+
+# ==========================================
+# EUDR COMPLIANCE ENDPOINTS
+# ==========================================
+
+# Generate EUDR Export (L1 - Requires Grant)
+curl -X 'GET' 'http://127.0.0.1:8000/geoid/<GEO_ID>/eudr-export' \
+  -H 'accept: application/json' \
+  -H 'X-Field-Grant: <GRANT_TOKEN>'
+
+# ==========================================
+# ANALYTICS & MISC
+# ==========================================
+
+# Fetch fields for a point
+curl -X 'POST' 'http://127.0.0.1:8000/fetch-fields-for-a-point' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "latitude": 30.9074,
+  "longitude": 75.7874
+}'
