@@ -15,6 +15,10 @@ from app.database import Base, engine, get_db, SessionLocal
 from app.models import GeoID
 from unittest.mock import patch
 
+# Override dependencies to decouple from external Hub auth
+from app.auth import require_l1
+app.dependency_overrides[require_l1] = lambda: {"sub": "test@demo.com"}
+
 client = TestClient(app)
 
 TEST_POLYGON_WKT = "POLYGON ((76.57207310199738 31.02188526513206,76.57203555107118 31.021319507765583,76.572362780571 31.021319507765583,76.57239496707916 31.02189446441107,76.57207310199738 31.02188526513206))"

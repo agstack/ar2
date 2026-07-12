@@ -18,6 +18,7 @@ from app.database import get_db
 from app.models import GeoID
 from app.utils import Utils, GeoDataUtils
 from app.s2_services import S2Service
+from app.auth import require_l1
 
 import asyncio
 from fastapi.responses import StreamingResponse
@@ -30,6 +31,7 @@ router = APIRouter(prefix="", tags=["Field Registration"])
 async def register_field_boundary(
     payload: FieldRegistrationRequest,
     automated_field: Optional[int] = Header(None, alias="AUTOMATED-FIELD"),
+    user: dict = Depends(require_l1),
     db: Session = Depends(get_db)
     ):
     try:
@@ -351,6 +353,7 @@ async def register_field_boundaries_geojson(
     file: Optional[UploadFile] = File(None),
     payload: Optional[Dict[str, Any]] = Body(None),
     automated_field: Optional[int] = Header(None, alias="AUTOMATED-FIELD"),
+    user: dict = Depends(require_l1),
     db: Session = Depends(get_db)
 ):
     try:
