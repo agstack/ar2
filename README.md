@@ -42,7 +42,7 @@ Follow these steps to run the Node locally alongside the `ar2-hub` and `Pancake`
 
 | Variable | Description | Default | Demo-Only? |
 |----------|-------------|---------|------------|
-| `DATABASE_URL` | PostgreSQL connection string. Falls back to local SQLite if omitted. | `sqlite:///./ar2.db` | No |
+| `DATABASE_URL` | PostgreSQL connection string. Defaults to local postgres if omitted. | `postgresql://postgres:postgres@localhost:5432/postgres` | No |
 | `world_shp_file_PATH` | Path to the `.shp` file used for point-in-polygon country resolution. | *None* | No |
 | `JWKS_URL` | URL to fetch the `ar2-hub` JSON Web Key Set for L0 access token validation. | `http://127.0.0.1:8000/.well-known/jwks.json` | No |
 | `AR_TRUSTED_ISSUER_PUBKEY`| Absolute path to the Pancake public PEM key used to verify Field Grants (L1). | `../pancake/services/.../dev_keys/dev_issuer_public.pem` | No |
