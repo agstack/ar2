@@ -47,7 +47,7 @@ pip install -r requirements.txt
 export AR_TRUSTED_ISSUER_PUBKEY="/pancake/services/pancake_services/grants/testkit/dev_keys/dev_issuer_public.pem"
 
 # 4. Start the Node server on port 8001
-uvicorn app.main:app --host 0.0.0.0 --port 8001
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### Terminal 3: Setup and Start the Hub Gateway (ar2-hub)
@@ -62,7 +62,8 @@ source ar2-hub-env/bin/activate
 pip install -r requirements.txt
 
 # 3. Start the Hub Gateway on port 8000
-uvicorn hub_main:app --host 0.0.0.0 --port 8000
+uvicorn hub_main:app --host 0.0.0.0 --port 8000 --reload
+
 ```
 
 ---
