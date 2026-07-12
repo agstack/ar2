@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 def get_utc_now():
     return datetime.now(timezone.utc)
 
-from sqlalchemy import Column, String, Integer, Float, DateTime
+from sqlalchemy import Column, String, Integer, Float, DateTime, JSON
 from sqlalchemy.dialects.postgresql import UUID, JSONB , ARRAY
 from app.database import Base
 
@@ -28,8 +28,8 @@ class GeoID(Base):
     boundary_type = Column(String)
     area_ha_approx = Column(Float)
     s2_level = Column(Integer)
-    s2_cells = Column(ARRAY(String))
-    geo_data = Column(JSONB) 
+    s2_cells = Column(ARRAY(String).with_variant(JSON(), 'sqlite'))
+    geo_data = Column(JSONB().with_variant(JSON(), 'sqlite')) 
     crop = Column(String)
     mask_level = Column(String, default="L0")
     created_at = Column(DateTime, default=get_utc_now)
