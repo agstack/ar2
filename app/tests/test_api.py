@@ -2,6 +2,9 @@ import os
 import json
 import pytest
 from fastapi.testclient import TestClient
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # Mock environment variables BEFORE importing app components
 # Allow overriding TESTKIT_DIR, defaulting to a relative path assuming pancake is checked out next to ar2
