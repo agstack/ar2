@@ -33,7 +33,7 @@ Follow these steps to run the Node locally alongside the `ar2-hub` and `Pancake`
 
 4. **Run the Uvicorn Server**:
    ```bash
-   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
    ```
 
 *(Note: The `ar2-hub` gateway proxy should be run on a separate port, e.g., 8000, and this Node should typically be bound to an internal port like 8001 or shielded from public access).*
@@ -45,9 +45,7 @@ Follow these steps to run the Node locally alongside the `ar2-hub` and `Pancake`
 | `DATABASE_URL` | PostgreSQL connection string. Defaults to local postgres if omitted. | `postgresql://postgres:postgres@localhost:5432/postgres` | No |
 | `world_shp_file_PATH` | Path to the `.shp` file used for point-in-polygon country resolution. | *None* | No |
 | `JWKS_URL` | URL to fetch the `ar2-hub` JSON Web Key Set for L0 access token validation. | `http://127.0.0.1:8000/.well-known/jwks.json` | No |
-| `AR_TRUSTED_ISSUER_PUBKEY`| Absolute path to the Pancake public PEM key used to verify Field Grants (L1). | `../pancake/services/.../dev_keys/dev_issuer_public.pem` | No |
-| `TESTKIT_DIR` | Directory containing dummy valid/revoked SD-JWT credentials used purely by `pytest`. | `/path/to/dev_keys` | Yes |
-| `TEST_STATUS_LIST_DIR` | Directory containing a local mock StatusList2021 file for revocation checks. | *None* | Yes |
+
 
 ## Endpoints Overview
 
