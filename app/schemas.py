@@ -11,10 +11,12 @@ from typing import Optional, Any, Dict
 
 class FieldRegistrationRequest(BaseModel):
     wkt: str = Field(..., description="WKT geometry of the field")
-    threshold: int = Field(default=95, description="Overlap threshold percentage")
+    threshold: int = Field(default=95, description="Overlap IoU threshold percentage for identity resolution")
     return_s2_indices: bool = Field(default=False)
     s2_index: Optional[str] = Field(default=None, description="Comma separated S2 levels to fetch")
     field_name: Optional[str] = Field(default=None, description="Optional name for the field")
+    accuracy_class: Optional[str] = Field(default=None, description="Optional accuracy class metadata")
+    submitter: Optional[str] = Field(default=None, description="Optional submitter info")
 
 class PointRegistrationRequest(BaseModel):
     wkt: str = Field(..., description="WKT geometry of the point")

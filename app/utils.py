@@ -19,7 +19,7 @@ from functools import partial
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.models import GeoID
+from app.models.geo_id_model import GeoID, GeoIDAlias
 
 import os
 from dotenv import load_dotenv
@@ -140,7 +140,6 @@ class Utils:
             db.add(geo_id_record)
             if commit:
                 db.commit()
-            
             return geo_data
         except Exception as e:
             if commit:
@@ -157,30 +156,88 @@ class Utils:
         return [r.geo_id for r in records]
 
     @staticmethod
-    def check_percentage_match(db: Session, matched_geo_ids: list, s2_index_list: list, resolution_level: int, threshold: int) -> list:
+    def check_percentage_match(db: Session, matched_geo_ids: list, s2_index_list: list, resolution_level: int, threshold: int, area_new: float = 0.0) -> dict:
 
-        percentage_matched_geo_ids = []
+        result = {"same_as": [], "child_of": []}
+        if not matched_geo_ids:
+            return result
+        
+        candidates = db.query(GeoID.id, GeoID.geo_id, GeoID.area_ha_approx, GeoID.geo_data, GeoID.created_at)\
+                       .filter(GeoID.geo_id.in_(matched_geo_ids)).all()
+        
         s2_index_set = set(s2_index_list)
 
-        for matched_geo_id in matched_geo_ids:
-            record = db.query(GeoID).filter(GeoID.geo_id == matched_geo_id).first()
-            if not record:
-                continue
+        for cand_id, cand_geo_id, cand_area, cand_geo_data, cand_created_at in candidates:
+            cand_area = cand_area or 0.0
+            min_area = min(area_new, cand_area) if area_new > 0 and cand_area > 0 else 0
+            max_area = max(area_new, cand_area) if area_new > 0 or cand_area > 0 else 1
+            area_ratio = min_area / float(max_area) if max_area > 0 else 0
             
-            geo_id_cell_tokens = record.geo_data.get(str(resolution_level), [])
+            geo_id_cell_tokens = cand_geo_data.get(str(resolution_level), [])
             geo_id_cell_set = set(geo_id_cell_tokens)
             
             if not geo_id_cell_set:
                 continue
 
             intersection = len(s2_index_set & geo_id_cell_set)
-            union = len(s2_index_set | geo_id_cell_set)
-            percentage_match = (intersection / float(union)) * 100
             
-            if percentage_match > threshold:
-                percentage_matched_geo_ids.append(matched_geo_id)
+            # Tier 2 prune for same_as
+            if area_ratio >= (threshold / 100.0):
+                union = len(s2_index_set | geo_id_cell_set)
+                percentage_match = (intersection / float(union)) * 100
+                if percentage_match >= threshold:
+                    result["same_as"].append((cand_geo_id, cand_created_at, cand_id))
+                    continue
+                    
+            # Check for high containment (child_of)
+            smaller_set_size = min(len(s2_index_set), len(geo_id_cell_set))
+            if smaller_set_size > 0:
+                containment_match = (intersection / float(smaller_set_size)) * 100
+                if containment_match >= threshold:
+                    result["child_of"].append((cand_geo_id, cand_created_at, cand_id))
                 
-        return percentage_matched_geo_ids
+        return result
+
+    @staticmethod
+    def resolve_or_register(db: Session, geo_id: str, indices: dict, threshold: int, area_ha_approx: float, payload: dict, content_hash: str):
+        # Tier 1: block on L13 cover
+        matched_geo_ids = Utils.fetch_geo_ids_for_cell_tokens(db, indices[13])
+        
+        # Tier 2 & 3: fine IoU on L20 covers
+        matches = Utils.check_percentage_match(db, matched_geo_ids, indices[20], 20, threshold, area_ha_approx)
+        
+        if matches["same_as"]:
+            # Resolve to earliest
+            matches["same_as"].sort(key=lambda x: (x[1], x[2])) # Sort by created_at, then id
+            canonical_geo_id = matches["same_as"][0][0]
+            
+            # Write alias
+            alias_record = GeoIDAlias(
+                canonical_geo_id=canonical_geo_id,
+                alias_content_hash=content_hash,
+                submitter=payload.get("submitter"),
+                accuracy_class=payload.get("accuracy_class"),
+                relation="same_as"
+            )
+            db.add(alias_record)
+            db.commit()
+            return "resolved", canonical_geo_id
+            
+        if matches["child_of"]:
+            matches["child_of"].sort(key=lambda x: (x[1], x[2]))
+            parent_geo_id = matches["child_of"][0][0]
+            
+            alias_record = GeoIDAlias(
+                canonical_geo_id=parent_geo_id,
+                alias_content_hash=content_hash,
+                submitter=payload.get("submitter"),
+                accuracy_class=payload.get("accuracy_class"),
+                relation="child_of"
+            )
+            db.add(alias_record)
+            return "nested", None
+            
+        return "new", None
 
     @staticmethod
     def get_s2_indexes_to_remove(s2_indexes: list):

@@ -12,12 +12,16 @@ from datetime import datetime, timezone
 def get_utc_now():
     return datetime.now(timezone.utc)
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, JSON
+from sqlalchemy import Column, String, Integer, Float, DateTime, JSON, ForeignKey, Enum, Index
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB , ARRAY
 from app.database import Base
 
 class GeoID(Base):
     __tablename__ = 'geo_ids'
+    __table_args__ = (
+        Index('ix_geo_ids_s2_cells_gin', 's2_cells', postgresql_using='gin'),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     geo_id = Column(String, unique=True, index=True, nullable=False)
@@ -34,3 +38,14 @@ class GeoID(Base):
     mask_level = Column(String, default="L0")
     created_at = Column(DateTime, default=get_utc_now)
     updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now)
+
+class GeoIDAlias(Base):
+    __tablename__ = 'geo_id_alias'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    canonical_geo_id = Column(String, ForeignKey('geo_ids.geo_id', ondelete='CASCADE'), index=True, nullable=False)
+    alias_content_hash = Column(String(64), index=True, nullable=False)
+    submitter = Column(String, nullable=True)
+    accuracy_class = Column(String, nullable=True)
+    created_at = Column(DateTime, default=get_utc_now)
+    relation = Column(Enum('same_as', 'child_of', name='relation_enum'), nullable=False)

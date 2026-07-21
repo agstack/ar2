@@ -88,80 +88,62 @@ async def register_field_boundary(
         geo_id_short = GeoDataUtils.generate_short_geo_id(geo_id)
         geo_id_l20_short = GeoDataUtils.generate_short_geo_id(geo_id_l20)
 
-        geo_id_exists_wkt = Utils.lookup_geo_ids(db, geo_id)
-        if not geo_id_exists_wkt:
-            if payload.return_s2_indices:
-                indices.update({
-                    8: S2Service.wkt_to_cell_tokens(payload.wkt, 8),
-                    15: S2Service.wkt_to_cell_tokens(payload.wkt, 15),
-                    18: S2Service.wkt_to_cell_tokens(payload.wkt, 18),
-                    19: S2Service.wkt_to_cell_tokens(payload.wkt, 19),
-                })
+        action, canonical_geo_id = Utils.resolve_or_register(
+            db=db,
+            geo_id=geo_id,
+            indices=indices,
+            threshold=payload.threshold,
+            area_ha_approx=area_ha,
+            payload=payload.model_dump() if hasattr(payload, "model_dump") else payload.dict(),
+            content_hash=content_hash
+        )
+
+        if action == "resolved":
+            return {
+                "message": "Resolved to existing field",
+                "Geo Id": canonical_geo_id,
+                "resolved_from_threshold": payload.threshold
+            }
+
+        target_geo_id = geo_id
+        target_geo_id_short = geo_id_short
+        if Utils.lookup_geo_ids(db, geo_id):
+            target_geo_id = geo_id_l20
+            target_geo_id_short = geo_id_l20_short
+            if Utils.lookup_geo_ids(db, geo_id_l20):
+                target_geo_id = str(uuid.uuid4())
+                target_geo_id_short = GeoDataUtils.generate_short_geo_id(target_geo_id)
+
+        if payload.return_s2_indices:
+            indices.update({
+                8: S2Service.wkt_to_cell_tokens(payload.wkt, 8),
+                15: S2Service.wkt_to_cell_tokens(payload.wkt, 15),
+                18: S2Service.wkt_to_cell_tokens(payload.wkt, 18),
+                19: S2Service.wkt_to_cell_tokens(payload.wkt, 19),
+            })
             
-            records_list = Utils.records_s2_cell_tokens(indices)
+        records_list = Utils.records_s2_cell_tokens(indices)
 
-            geo_data = Utils.register_field_boundary(
-                db=db, geo_id=geo_id, geo_id_short=geo_id_short, content_hash=content_hash,
-                indices=indices, records_list=records_list, field_wkt=payload.wkt, 
-                country=country, boundary_type=boundary_type, field_name=field_name,area_ha_approx=area_ha
-            )
+        geo_data = Utils.register_field_boundary(
+            db=db, geo_id=target_geo_id, geo_id_short=target_geo_id_short, content_hash=content_hash,
+            indices=indices, records_list=records_list, field_wkt=payload.wkt, 
+            country=country, boundary_type=boundary_type, field_name=payload.field_name, area_ha_approx=area_ha,
+            commit=True
+        )
 
-            response_data = {"message": "Field Boundary registered successfully.", "Geo Id": geo_id, "Geo Id Short": geo_id_short}
+        response_data = {"message": "Field Boundary registered successfully.", "Geo Id": target_geo_id, "Geo Id Short": target_geo_id_short}
 
-            if payload.return_s2_indices and payload.s2_index:
-                s2_index_to_fetch = [int(i) for i in payload.s2_index.split(',')]
-                s2_indexes_to_remove = Utils.get_s2_indexes_to_remove(s2_index_to_fetch)
-                if s2_indexes_to_remove != -1:
-                    s2_data = dict(geo_data)
-                    s2_data = Utils.get_specific_s2_index_geo_data(s2_data, s2_indexes_to_remove)
-                    if isinstance(s2_data, dict) and "wkt" in s2_data:
-                        s2_data.pop("wkt")
-                    response_data["S2 Cell Tokens"] = s2_data
+        if payload.return_s2_indices and payload.s2_index:
+            s2_index_to_fetch = [int(i) for i in payload.s2_index.split(',')]
+            s2_indexes_to_remove = Utils.get_s2_indexes_to_remove(s2_index_to_fetch)
+            if s2_indexes_to_remove != -1:
+                s2_data = dict(geo_data)
+                s2_data = Utils.get_specific_s2_index_geo_data(s2_data, s2_indexes_to_remove)
+                if isinstance(s2_data, dict) and "wkt" in s2_data:
+                    s2_data.pop("wkt")
+                response_data["S2 Cell Tokens"] = s2_data
 
-            return response_data
-
-        s2_index_to_check = indices[20]
-        matched_geo_ids = Utils.fetch_geo_ids_for_cell_tokens(db, s2_index_to_check)
-        percentage_matched_geo_ids = Utils.check_percentage_match(db, matched_geo_ids, s2_index_to_check, 20, payload.threshold)
-
-        if len(percentage_matched_geo_ids) > 0:
-            raise HTTPException(
-                status_code=400,
-                detail={"message": "field already registered previously", "matched geo ids": percentage_matched_geo_ids}
-            )
-
-        geo_id_exists_wkt_l20 = Utils.lookup_geo_ids(db, geo_id_l20)
-        if not geo_id_exists_wkt_l20:
-            if payload.return_s2_indices:
-                indices.update({
-                    8: S2Service.wkt_to_cell_tokens(payload.wkt, 8),
-                    15: S2Service.wkt_to_cell_tokens(payload.wkt, 15),
-                    18: S2Service.wkt_to_cell_tokens(payload.wkt, 18),
-                    19: S2Service.wkt_to_cell_tokens(payload.wkt, 19),
-                })
-            records_list = Utils.records_s2_cell_tokens(indices)
-
-            geo_data = Utils.register_field_boundary(
-                db=db, geo_id=geo_id_l20, geo_id_short=geo_id_l20_short, content_hash=content_hash,
-                indices=indices, records_list=records_list, field_wkt=payload.wkt, 
-                country=country, boundary_type=boundary_type, field_name=field_name,area_ha_approx=area_ha
-            )
-
-            response_data = {"message": "Field Boundary registered successfully.", "Geo Id": geo_id_l20, "Geo Id Short": geo_id_l20_short}
-
-            if payload.return_s2_indices and payload.s2_index:
-                s2_index_to_fetch = [int(i) for i in payload.s2_index.split(',')]
-                s2_indexes_to_remove = Utils.get_s2_indexes_to_remove(s2_index_to_fetch)
-                if s2_indexes_to_remove != -1:
-                    s2_data = dict(geo_data)
-                    s2_data = Utils.get_specific_s2_index_geo_data(s2_data, s2_indexes_to_remove)
-                    if isinstance(s2_data, dict) and "wkt" in s2_data:
-                        s2_data.pop("wkt")
-                    response_data["S2 Cell Tokens"] = s2_data
-
-            return response_data
-
-        return {"message": "Field Boundary already registered.", "Geo Id": geo_id_l20, "Geo Id Short": geo_id_l20_short}
+        return response_data
 
     except HTTPException:
         raise
@@ -471,45 +453,27 @@ async def register_field_boundaries_geojson(
 
                 records_list = Utils.records_s2_cell_tokens(indices)
 
-                geo_id_exists_wkt = Utils.lookup_geo_ids(db, geo_id)
-                if not geo_id_exists_wkt:
-                    geo_data = Utils.register_field_boundary(
-                        db=db, geo_id=geo_id, geo_id_short=geo_id_short, content_hash=content_hash,
-                        indices=indices, records_list=records_list, field_wkt=field_wkt, 
-                        country=country, boundary_type=boundary_type, field_name=field_name,area_ha_approx=area_ha,
-                        commit=False
+                if geometry_type != 'Point':
+                    payload_dict = {
+                        "threshold": threshold,
+                        "submitter": feature.get('properties', {}).get('submitter'),
+                        "accuracy_class": feature.get('properties', {}).get('accuracy_class')
+                    }
+                    action, canonical_geo_id = Utils.resolve_or_register(
+                        db=db,
+                        geo_id=geo_id,
+                        indices=indices,
+                        threshold=threshold,
+                        area_ha_approx=area_ha,
+                        payload=payload_dict,
+                        content_hash=content_hash
                     )
                     
-                    geo_data_to_return = None
-                    if s2_index and s2_indexes_to_remove != -1:
-                        geo_data_to_return = Utils.get_specific_s2_index_geo_data(dict(geo_data), s2_indexes_to_remove)
-                        if isinstance(geo_data_to_return, dict) and "wkt" in geo_data_to_return:
-                            geo_data_to_return.pop("wkt")
-
-                    results.append({
-                        "status": "created",
-                        "message": "Field Boundary registered successfully",
-                        "geo_id": geo_id,
-                        "s2_cell_tokens": geo_data_to_return,
-                        "geo_json": feature
-                    })
-                    yield json.dumps({
-                        "status": "processing", 
-                        "progress": index + 1, 
-                        "percentage": round(((index + 1) / total_features) * 100, 2)
-                    }) + "\n"
-                    continue
-
-                if geometry_type != 'Point':
-                    s2_index_to_check = indices[20]
-                    matched_geo_ids = Utils.fetch_geo_ids_for_cell_tokens(db, s2_index_to_check)
-                    percentage_matched_geo_ids = Utils.check_percentage_match(db, matched_geo_ids, s2_index_to_check, resolution_level, threshold)
-                    
-                    if len(percentage_matched_geo_ids) > 0:
+                    if action == "resolved":
                         results.append({
                             "status": "exists",
-                            "message": "Threshold matched for already registered Field Boundary(ies)",
-                            "matched_geo_ids": percentage_matched_geo_ids,
+                            "message": "Resolved to existing field",
+                            "geo_id": canonical_geo_id,
                             "geo_json": feature
                         })
                         yield json.dumps({
@@ -519,34 +483,37 @@ async def register_field_boundaries_geojson(
                         }) + "\n"
                         continue
 
-                geo_id_exists_wkt_l20 = Utils.lookup_geo_ids(db, geo_id_l20)
-                if not geo_id_exists_wkt_l20:
-                    geo_data = Utils.register_field_boundary(
-                        db=db, geo_id=geo_id_l20, geo_id_short=geo_id_l20_short, content_hash=content_hash,
-                        indices=indices, records_list=records_list, field_wkt=field_wkt, 
-                        country=country, boundary_type=boundary_type, field_name=field_name,area_ha_approx=area_ha
-                    )
-                    
-                    geo_data_to_return = None
-                    if s2_index and s2_indexes_to_remove != -1:
-                        geo_data_to_return = Utils.get_specific_s2_index_geo_data(dict(geo_data), s2_indexes_to_remove)
-                        if isinstance(geo_data_to_return, dict) and "wkt" in geo_data_to_return:
-                            geo_data_to_return.pop("wkt")
+                target_geo_id = geo_id
+                target_geo_id_short = geo_id_short
+                if Utils.lookup_geo_ids(db, geo_id):
+                    target_geo_id = geo_id_l20
+                    target_geo_id_short = geo_id_l20_short
+                    if Utils.lookup_geo_ids(db, geo_id_l20):
+                        target_geo_id = str(uuid.uuid4())
+                        target_geo_id_short = GeoDataUtils.generate_short_geo_id(target_geo_id)
 
-                    results.append({
-                        "status": "created",
-                        "message": "Field Boundary registered successfully",
-                        "geo_id": geo_id_l20,
-                        "s2_cell_tokens": geo_data_to_return,
-                        "geo_json": feature
-                    })
-                else:
-                    results.append({
-                        "status": "exists",
-                        "message": "Field Boundary already registered",
-                        "geo_id": geo_id_l20,
-                        "geo_json_requested": feature
-                    })
+                records_list = Utils.records_s2_cell_tokens(indices)
+
+                geo_data = Utils.register_field_boundary(
+                    db=db, geo_id=target_geo_id, geo_id_short=target_geo_id_short, content_hash=content_hash,
+                    indices=indices, records_list=records_list, field_wkt=field_wkt, 
+                    country=country, boundary_type=boundary_type, field_name=field_name, area_ha_approx=area_ha,
+                    commit=False
+                )
+                
+                geo_data_to_return = None
+                if s2_index and s2_indexes_to_remove != -1:
+                    geo_data_to_return = Utils.get_specific_s2_index_geo_data(dict(geo_data), s2_indexes_to_remove)
+                    if isinstance(geo_data_to_return, dict) and "wkt" in geo_data_to_return:
+                        geo_data_to_return.pop("wkt")
+
+                results.append({
+                    "status": "created",
+                    "message": "Field Boundary registered successfully",
+                    "geo_id": target_geo_id,
+                    "s2_cell_tokens": geo_data_to_return,
+                    "geo_json": feature
+                })
 
             except Exception as field_error:
                 db.rollback() 

@@ -6,6 +6,9 @@ It stores high-resolution field boundary geometries and verifies field access cr
 1. **The Hub routes but never authorizes**: The `ar2-hub` gateway forwards requests, but the Node is the ultimate authority that verifies the cryptographic grant.
 2. **L1 requires a grant credential**: High-resolution spatial data (Level 1 Masking) is never exposed without a valid ODRL JWT credential. The owner of the field is automatically the first grantee.
 
+### Key Features
+* **Identity Resolution Engine**: Prevents duplicated fields in the global registry. If a farm is registered twice (overlapping by a configurable `threshold`, defaulting to 95%), the node seamlessly aliases the new registration to the existing `Geo Id`. Furthermore, it supports hierarchical **`child_of`** relationship mapping for sub-plots completely contained within a larger farm boundary.
+
 ## Architecture
 
 Please see [ARCHITECTURE.md](./ARCHITECTURE.md) for a detailed diagram of the Hub-Node-Pancake flow and a deeper dive into the DPI Trust architecture.

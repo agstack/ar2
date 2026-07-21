@@ -16,6 +16,7 @@ os.environ["TEST_STATUS_LIST_DIR"] = TESTKIT_DIR
 from app.main import app
 from app.database import Base, engine, get_db, SessionLocal
 from app.models import GeoID
+from app.models.geo_id_model import GeoIDAlias
 from unittest.mock import patch
 
 # Override dependencies to decouple from external Hub auth
@@ -380,3 +381,59 @@ def test_valid_grant_fetch_centroid(setup_database):
     res = client.get(f"/fetch-field-centroid/{geoid}", headers={"X-Field-Grant": token})
     assert res.status_code == 200
     assert res.json()["MaskingLevel"] == "L1"
+
+# --- Identity Resolution Tests ---
+
+TEST_FARM_WKT = "POLYGON ((76.6001 31.1001, 76.6001 31.1002, 76.6002 31.1002, 76.6002 31.1001, 76.6001 31.1001))"
+TEST_SUBPLOT_WKT = "POLYGON ((76.60012 31.10012, 76.60012 31.10018, 76.60018 31.10018, 76.60018 31.10012, 76.60012 31.10012))"
+TEST_NEAR_DUPE_WKT = "POLYGON ((76.6001 31.1001, 76.6001 31.1002, 76.6002 31.1002, 76.6002 31.100101, 76.6001 31.1001))"
+
+def test_identity_resolution_same_as(mock_auth):
+    # 1. Register the original field
+    res1 = client.post(
+        "/register-field-boundary",
+        json={"wkt": TEST_FARM_WKT, "threshold": 95, "return_s2_indices": False, "submitter": "test1"}
+    )
+    assert res1.status_code == 200
+    original_geo_id = res1.json()["Geo Id"]
+
+    # 2. Register a near-duplicate field
+    res2 = client.post(
+        "/register-field-boundary",
+        json={"wkt": TEST_NEAR_DUPE_WKT, "threshold": 95, "return_s2_indices": False, "submitter": "test2"}
+    )
+    assert res2.status_code == 200
+    assert res2.json()["message"] == "Resolved to existing field"
+    assert res2.json()["Geo Id"] == original_geo_id
+
+    # 3. Verify Alias record
+    db = SessionLocal()
+    alias = db.query(GeoIDAlias).filter(GeoIDAlias.canonical_geo_id == original_geo_id, GeoIDAlias.relation == "same_as").first()
+    assert alias is not None
+    assert alias.submitter == "test2"
+    db.close()
+
+def test_identity_resolution_nested(mock_auth):
+    # 1. Register a large field
+    res1 = client.post(
+        "/register-field-boundary",
+        json={"wkt": TEST_FARM_WKT, "threshold": 95, "return_s2_indices": False, "submitter": "parent_farmer"}
+    )
+    assert res1.status_code == 200
+    parent_geo_id = res1.json()["Geo Id"]
+
+    # 2. Register a nested subplot
+    res2 = client.post(
+        "/register-field-boundary",
+        json={"wkt": TEST_SUBPLOT_WKT, "threshold": 95, "return_s2_indices": False, "submitter": "child_farmer"}
+    )
+    assert res2.status_code == 200
+    
+    child_geo_id = res2.json()["Geo Id"]
+    assert child_geo_id != parent_geo_id
+
+    # 3. Verify Alias record (child_of link)
+    db = SessionLocal()
+    alias = db.query(GeoIDAlias).filter(GeoIDAlias.canonical_geo_id == parent_geo_id, GeoIDAlias.relation == "child_of").first()
+    assert alias is not None
+    db.close()

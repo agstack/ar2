@@ -57,10 +57,38 @@ REG_RES=$(curl -s -X POST "$AR_HUB_URL/register-field-boundary" \
 
 GEOID=$(echo "$REG_RES" | JSON "['Geo Id']")
 if [ "$GEOID" = "None" ]; then
-    # Handle duplicate registration
     GEOID=$(echo "$REG_RES" | JSON "['detail']['matched geo ids'][0]")
 fi
 echo "  Registered Field GeoID: $GEOID"
+echo ""
+
+echo "2A. Identity Resolution - Farmer Registers Exact Duplicate"
+WKT_DUPE="POLYGON((-119.48387145996094 36.40810420514039,-119.48382854461671 36.40449287165274,-119.4750738143921 36.40452743066338,-119.4751811027527 36.408052369005034,-119.48387145996094 36.40810420514039))"
+REG_DUPE_RES=$(curl -s -X POST "$AR_HUB_URL/register-field-boundary" \
+  -H "Authorization: Bearer $FARMER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"wkt\": \"$WKT_DUPE\", \"threshold\": 95, \"return_s2_indices\": false}")
+DUPE_MSG=$(echo "$REG_DUPE_RES" | JSON "['message']")
+DUPE_GEOID=$(echo "$REG_DUPE_RES" | JSON "['Geo Id']")
+expect "Exact Duplicate Message" "$DUPE_MSG" "Exact geometry already registered."
+expect "Exact Duplicate GeoID Matches" "$DUPE_GEOID" "$GEOID"
+echo ""
+
+echo "2B. Identity Resolution - Farmer Registers Nested Subplot"
+WKT_SUBPLOT="POLYGON((-119.4800 36.4060, -119.4800 36.4070, -119.4780 36.4070, -119.4780 36.4060, -119.4800 36.4060))"
+REG_SUB_RES=$(curl -s -X POST "$AR_HUB_URL/register-field-boundary" \
+  -H "Authorization: Bearer $FARMER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"wkt\": \"$WKT_SUBPLOT\", \"threshold\": 95, \"return_s2_indices\": false}")
+SUB_MSG=$(echo "$REG_SUB_RES" | JSON "['message']")
+SUB_GEOID=$(echo "$REG_SUB_RES" | JSON "['Geo Id']")
+expect "Subplot Registered Successfully" "$SUB_MSG" "Field Boundary registered successfully."
+if [ "$SUB_GEOID" = "$GEOID" ]; then
+    echo "  FAIL: Subplot GeoID was identical to parent!"
+    exit 1
+else
+    echo "  PASS: Subplot GeoID is unique."
+fi
 echo ""
 
 echo "3. Farmer Creates FieldList on Pancake"
