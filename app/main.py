@@ -8,7 +8,7 @@
 
 from fastapi import FastAPI
 from app.database import engine, Base
-from app.routers import field_registration , fetch_field , point_registration , analytics_and_maintenance_apis
+from app.routers import field_registration , fetch_field , point_registration , analytics_and_maintenance_apis, traceforward
 
 Base.metadata.create_all(bind=engine)
 
@@ -23,6 +23,7 @@ app.include_router(field_registration.router)
 app.include_router(fetch_field.router)
 app.include_router(point_registration.router)
 app.include_router(analytics_and_maintenance_apis.router)
+app.include_router(traceforward.router)
 
 
 

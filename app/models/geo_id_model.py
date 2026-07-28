@@ -49,3 +49,26 @@ class GeoIDAlias(Base):
     accuracy_class = Column(String, nullable=True)
     created_at = Column(DateTime, default=get_utc_now)
     relation = Column(Enum('same_as', 'child_of', name='relation_enum'), nullable=False)
+class ListArtifact(Base):
+    """Content-derived list artifact. list_id is the Merkle root over its members."""
+    __tablename__ = 'list_artifact'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    list_id = Column(String(64), unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=get_utc_now)
+
+class ListMemberEdge(Base):
+    """Reverse edge: geoid -> list_id"""
+    __tablename__ = 'listmember_edge'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    geoid = Column(String, index=True, nullable=False)
+    list_id = Column(String(64), ForeignKey('list_artifact.list_id', ondelete='CASCADE'), index=True, nullable=False)
+
+class ListParentEdge(Base):
+    """Recursive composition: child_list_id -> parent_list_id"""
+    __tablename__ = 'list_parent_edge'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    child_list_id = Column(String(64), index=True, nullable=False)
+    parent_list_id = Column(String(64), ForeignKey('list_artifact.list_id', ondelete='CASCADE'), index=True, nullable=False)
