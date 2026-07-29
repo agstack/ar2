@@ -57,9 +57,14 @@ class ListArtifact(Base):
     list_id = Column(String(64), unique=True, index=True, nullable=False)
     created_at = Column(DateTime, default=get_utc_now)
 
+from sqlalchemy import UniqueConstraint
+
 class ListMemberEdge(Base):
     """Reverse edge: geoid -> list_id"""
     __tablename__ = 'listmember_edge'
+    __table_args__ = (
+        UniqueConstraint('geoid', 'list_id', name='uix_listmember_edge_geoid_listid'),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     geoid = Column(String, index=True, nullable=False)

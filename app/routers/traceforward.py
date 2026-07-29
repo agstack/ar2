@@ -1,6 +1,7 @@
 import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
+from app.auth import require_l1
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -21,6 +22,7 @@ class RegisterListResponse(BaseModel):
 @router.post("/list-artifact", response_model=RegisterListResponse)
 def register_list_artifact(
     payload: RegisterListRequest,
+    user: dict = Depends(require_l1),
     db: Session = Depends(get_db)
 ):
     """
@@ -81,6 +83,7 @@ class ReverseLookupResponse(BaseModel):
 @router.get("/list-artifact/reverse/{geoid}", response_model=ReverseLookupResponse)
 def get_lists_for_geoid(
     geoid: str,
+    user: dict = Depends(require_l1),
     db: Session = Depends(get_db)
 ):
     """
