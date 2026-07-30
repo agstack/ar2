@@ -16,7 +16,7 @@ from app.models import GeoID
 from app.utils import Utils
 from app.schemas import FetchFieldResponse, OverlapRequest, FetchFieldsForPointRequest
 from app.s2_services import S2Service
-from app.auth import get_current_user, require_l1, verify_field_grant
+from app.auth import get_current_user, require_hub_user, verify_field_grant
 
 router = APIRouter(prefix="", tags=["Fetch Field"])
 

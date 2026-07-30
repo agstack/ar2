@@ -20,8 +20,8 @@ from app.models.geo_id_model import GeoIDAlias
 from unittest.mock import patch
 
 # Override dependencies to decouple from external Hub auth
-from app.auth import require_l1
-app.dependency_overrides[require_l1] = lambda: {"sub": "test@demo.com"}
+from app.auth import require_hub_user
+app.dependency_overrides[require_hub_user] = lambda: {"sub": "test@demo.com"}
 
 client = TestClient(app)
 

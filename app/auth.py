@@ -63,11 +63,11 @@ async def get_current_user(request: Request):
 
     return verify_token(token)
 
-async def require_l1(user = Depends(get_current_user)):
+async def require_hub_user(user = Depends(get_current_user)):
 
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="L1 authorization required"
+            detail="Hub authentication required"
         )
     return user

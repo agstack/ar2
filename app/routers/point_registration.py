@@ -17,7 +17,7 @@ from app.database import get_db
 from app.models import GeoID
 from app.utils import Utils, GeoDataUtils
 from app.s2_services import S2Service
-from app.auth import require_l1
+from app.auth import require_hub_user
 
 from fastapi.responses import StreamingResponse
 import asyncio
@@ -30,7 +30,7 @@ router = APIRouter(prefix="", tags=["Point Registration"])
 async def register_point(
     payload: PointRegistrationRequest,
     automated_field: Optional[int] = Header(None, alias="AUTOMATED-FIELD"),
-    user: dict = Depends(require_l1),
+    user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
     ):
 
@@ -262,7 +262,7 @@ async def register_points_geojson(
     file: Optional[UploadFile] = File(None),
     payload: Optional[Dict[str, Any]] = Body(None),
     automated_field: Optional[int] = Header(None, alias="AUTOMATED-FIELD"),
-    user: dict = Depends(require_l1),
+    user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
 ):
     try:
