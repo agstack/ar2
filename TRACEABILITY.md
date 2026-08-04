@@ -33,10 +33,29 @@ This bears stating before anything else, because it is the first thing people as
 
 - **The node is the enforcement point — always.** Per the first principle in [ARCHITECTURE.md](./ARCHITECTURE.md), *the Hub routes but never authorizes*. The Hub authenticates a session and proxies the request; the **node** independently verifies the presented credential (`verify_sdjwt_grant` in `app/grant_verifier.py`, reached via `app/auth.py`) against the trusted issuer key and the revocation StatusList. A request that merely arrived through the Hub is not authorized by that fact.
 - **Trace-back requires a credential for the product being traced.** It is "self-service" only in the sense that it needs **no authority credential** — the caller still has to hold a valid, unexpired, unrevoked grant (or ownership) for the list/product they are walking down. Holding the product is what entitles you to see its supply base. A caller with no grant for that artifact gets nothing; the node does not reveal another party's product composition, and does not reveal that it exists (the `404`-not-`403` pattern).
+- **The authority credential is a *superset*: it authorizes trace-back as well, on any artifact (§2.2).** An investigation starts at a product the investigator does not own, so the credential that unlocks trace-forward also overrides the grant requirement for trace-back.
 - **Trace-forward requires that credential *plus* two gates** — a Hub-issued `trace-forward` capability (Gate A) and seed authorization (Gate B: ownership/grant of the seed **or** an accredited authority credential). See §6.
 - **Identity disclosure requires accreditation, and is logged.** Turning hashes into party names (Tier 3) requires a valid, in-scope **authority credential** issued under Hub accreditation, and every such call writes an audit packet.
 
 The practical consequence: possession of a GeoID or a ListID is **not** a permission. Identifiers are public, reproducible, and safe to publish; what they resolve to is gated at the node, per caller, per query, every time.
+
+### 2.2 The authority credential is a superset: it unlocks *both* directions
+
+A recall does not begin at a field. It begins at **a product the investigator does not own** — a bag of shredded lettuce bought off a grocery shelf or handed over by a restaurant. The investigator's *first* question is a **trace-back** on somebody else's artifact: "which fields is this made from?" Only once that names a suspect field can the trace-forward run.
+
+So an accredited authority credential does double duty. It is not just the key to trace-forward; it **overrides the grant requirement for trace-back on any artifact**. Trace-forward authority strictly *contains* trace-back authority — one credential, both directions, one incident:
+
+```mermaid
+flowchart LR
+    shelf["Retail item off the shelf (ListID the authority does not own)"] -->|"trace-back, authority override"| fields["Constituent GeoIDs: the candidate fields"]
+    fields -->|"epidemiology narrows to one"| seed["Implicated field (GeoID)"]
+    seed -->|"trace-forward, Gate A + Gate B"| everywhere["Every other product containing that field, to every retail terminal"]
+```
+
+Trace-back therefore has the **same two accepted paths** as Gate B: (i) a grant/ownership of the artifact — the ordinary commercial case, or (ii) a valid, in-scope authority credential — the investigator's case. Two consequences the node enforces:
+
+- **Audit symmetry.** An authority-override trace-back reaches into another party's data, exactly as trace-forward does, so it writes a `traceback.invoked` entry to the MEAL ledger (caller, credential ID, artifact, member count). A holder tracing back their **own** product is not audited — that is simply reading what you hold.
+- **Identity resolution follows the credential, not the direction.** An authority tracing back may resolve the constituent fields' holders, because it has to know which farm to go inspect. A grant-holding retailer tracing back its own case gets member GeoIDs — hashes — and no grower identities.
 
 ## 2. The primitives (all node-local, all content-derived)
 
@@ -106,7 +125,11 @@ Taco Bell #4471 has cyclosporiasis complaints tied to a lettuce SKU. The chain's
 { VRD-A12, VRD-A13, SFF-BN, CST-C }
 ```
 
-No authority credential is needed here — but note what *is* needed: a node-verified grant for this artifact. Another restaurant chain, or a journalist holding the same ListID, gets nothing (§2.1). Epidemiology across multiple sick locations then intersects the trace-back sets those holders report; the field common to all of them is `geoid:SFF-BN`. That becomes the **incident seed**.
+No authority credential is needed here — but note what *is* needed: a node-verified grant for this artifact. Another restaurant chain, or a journalist holding the same ListID, gets nothing (§2.1).
+
+**The same step, done by the investigator.** A public-health investigator buys the grocer's bagged lettuce off the shelf and scans its QR to `L_retailGRO`. It owns nothing and holds no grant — but its **authority credential overrides the grant requirement** (§2.2), so the identical trace-back succeeds on an artifact belonging to someone else, returning `{ VRD-A12, VRD-A13, SFF-BN, CST-C }`. That call is written to the audit ledger. This is why the credential has to cover both directions: without it, the investigation cannot take its first step, and there is no seed to trace forward from.
+
+Epidemiology across multiple sick locations then intersects these trace-back sets; the field common to all of them is `geoid:SFF-BN`. That becomes the **incident seed**.
 
 ### 3.3 Trace-forward (authority-gated) — the recall
 
@@ -170,7 +193,7 @@ The one-sentence version: **incumbents make a private map of everyone's private 
 
 | Query | What the node requires |
 |---|---|
-| **Trace-back** (product to fields) | A valid, unexpired, unrevoked **grant/ownership for that product**, verified at the node. No authority credential. A caller without a grant for the artifact is refused and is not even told it exists. |
+| **Trace-back** (product to fields) | **Either** a valid, unexpired, unrevoked **grant/ownership for that product**, verified at the node (no authority credential needed), **or** a valid, in-scope **authority credential**, which overrides the grant requirement on any artifact and is audited (§2.2). A caller with neither is refused and is not even told the artifact exists. |
 | **Trace-forward, structural** (Tier 1) | **Gate A** + **Gate B** (below). Returns hashes and counts only — never party names. |
 | **Trace-forward, identities** (Tier 3) | Gate A + Gate B **and** a valid, in-scope **authority credential**. Audited on every call. |
 | **Self-check** (Tier 2) | Node-verified identity, scoped to the caller's **own** holdings. No authority credential. |
@@ -179,7 +202,7 @@ The one-sentence version: **incumbents make a private map of everyone's private 
 - **Gate B — seed authorization (at the node), by *either* path:** (i) the caller **owns or is granted** the seed GeoID/RegionID (a grower raising a recall on their own field), **or** (ii) the caller presents a valid, in-scope **authority credential** (an accredited authority, which owns nothing). Ownership is never *required* when a valid authority credential is present — otherwise the recall by an authority is impossible.
 - **"Accredited," not "official."** The authority credential is issued under Hub accreditation with a StatusList revocation range. Being a food-safety or public-health professional confers nothing on its own; the credential does, it can be scoped (jurisdiction, validity window), it can be **revoked**, and an expired, revoked, or out-of-scope credential is rejected outright. Every Tier-3 use is written to the MEAL audit ledger, so the exercise of authority is reviewable after the fact.
 
-The invariant to remember: **holding product lets you trace back; owning the seed lets you *raise* a recall and see its shape; only a valid, accredited authority credential lets you *see downstream identities*.**
+The invariant to remember: **holding product lets you trace back; owning the seed lets you *raise* a recall and see its shape; a valid, accredited authority credential does all of it — it traces back product you do not hold, seeds a forward recall you own nothing in, and resolves identities — and every use of it is audited.**
 
 ## 7. How this maps to the code on this branch
 
