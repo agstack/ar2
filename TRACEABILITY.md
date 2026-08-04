@@ -25,7 +25,18 @@ flowchart LR
     end
 ```
 
-The crucial asymmetry is **who owns the privacy at stake**. Trace-back exposes *your own* supply base — you are entitled to it. Trace-forward exposes *other parties' commercial relationships* — the reverse edges are literally "who bought from whom." That is why trace-forward is **authority-gated** on this node and trace-back is not (§6).
+The crucial asymmetry is **who owns the privacy at stake**. Trace-back exposes *your own* supply base — you are entitled to it, but only for product you actually hold. Trace-forward exposes *other parties' commercial relationships* — the reverse edges are literally "who bought from whom." So both directions are credentialed; trace-forward is **additionally** authority-gated (§2.1, §6).
+
+### 2.1 Neither direction is open: the node authorizes every trace
+
+This bears stating before anything else, because it is the first thing people assume wrongly. **There is no anonymous or open traceability query on this node.** Both trace-back and trace-forward are available *only* to a caller the node has itself verified as an authorized user for that specific query:
+
+- **The node is the enforcement point — always.** Per the first principle in [ARCHITECTURE.md](./ARCHITECTURE.md), *the Hub routes but never authorizes*. The Hub authenticates a session and proxies the request; the **node** independently verifies the presented credential (`verify_sdjwt_grant` in `app/grant_verifier.py`, reached via `app/auth.py`) against the trusted issuer key and the revocation StatusList. A request that merely arrived through the Hub is not authorized by that fact.
+- **Trace-back requires a credential for the product being traced.** It is "self-service" only in the sense that it needs **no authority credential** — the caller still has to hold a valid, unexpired, unrevoked grant (or ownership) for the list/product they are walking down. Holding the product is what entitles you to see its supply base. A caller with no grant for that artifact gets nothing; the node does not reveal another party's product composition, and does not reveal that it exists (the `404`-not-`403` pattern).
+- **Trace-forward requires that credential *plus* two gates** — a Hub-issued `trace-forward` capability (Gate A) and seed authorization (Gate B: ownership/grant of the seed **or** an accredited authority credential). See §6.
+- **Identity disclosure requires accreditation, and is logged.** Turning hashes into party names (Tier 3) requires a valid, in-scope **authority credential** issued under Hub accreditation, and every such call writes an audit packet.
+
+The practical consequence: possession of a GeoID or a ListID is **not** a permission. Identifiers are public, reproducible, and safe to publish; what they resolve to is gated at the node, per caller, per query, every time.
 
 ## 2. The primitives (all node-local, all content-derived)
 
@@ -87,19 +98,19 @@ flowchart TD
     case77 --> retailGRO["RB-GROCER (L_retailGRO) -> grocer bag w/ QR"]
 ```
 
-### 3.2 The signal, and trace-back (self-service, no authority needed)
+### 3.2 The signal, and trace-back (grant-gated: the holder's own product)
 
-Taco Bell #4471 has cyclosporiasis complaints tied to a lettuce SKU. The store (or the chain's food-safety team) scans the case/label, resolving to `L_retailTB`, and asks the node **"what fields is this made from?"** — a trace-back. The node walks **down** `L_retailTB → L_pallet19 → L_case77 → {L_shredEarly, L_shredLate}` and returns the constituent GeoIDs:
+Taco Bell #4471 has cyclosporiasis complaints tied to a lettuce SKU. The chain's food-safety team scans the case label, resolving to `L_retailTB`, and asks the node **"what fields is this made from?"** — a trace-back. Because the chain **holds a valid grant for that unit** (it received the product, and the grant travelled with it), the node verifies the credential and walks **down** `L_retailTB → L_pallet19 → L_case77 → {L_shredEarly, L_shredLate}`, returning the constituent GeoIDs:
 
 ```
 { VRD-A12, VRD-A13, SFF-BN, CST-C }
 ```
 
-This is the party's **own** product, so no special authority is required — trace-back is self-service (§6). Epidemiology across multiple sick locations now intersects their trace-back sets; the field common to all of them is `geoid:SFF-BN`. That becomes the **incident seed**.
+No authority credential is needed here — but note what *is* needed: a node-verified grant for this artifact. Another restaurant chain, or a journalist holding the same ListID, gets nothing (§2.1). Epidemiology across multiple sick locations then intersects the trace-back sets those holders report; the field common to all of them is `geoid:SFF-BN`. That becomes the **incident seed**.
 
 ### 3.3 Trace-forward (authority-gated) — the recall
 
-The public-health authority holds a Hub-issued trace-forward capability and an authority credential (§6). It seeds a trace-forward from `geoid:SFF-BN`. The node:
+Now the query changes character. Nobody in the chain above can run this next step: it reaches into *other companies'* customer relationships. It can be run only by an **accredited food-safety authority** — a public-health or regulatory body that the Hub has accredited for this purpose, holding both the Hub-issued `trace-forward` capability (Gate A) and a valid, in-scope authority credential (Gate B / Tier 3, §6). Working in food safety does not confer this; **accreditation recorded at the Hub and verified at the node** does, and each use is audited. The authority seeds a trace-forward from `geoid:SFF-BN`. The node:
 
 1. **Expands the seed to its equivalence set** `E(SFF-BN)` via `same_as` aliases — if Salinas Family Farms happened to register that field twice, both identifiers are included, so the recall cannot miss product logged under a duplicate. (Trace-forward completeness *is* de-duplication completeness — this is why content-derived, de-duplicated GeoIDs are a hard requirement, not a nicety.)
 2. **Reverse-index probe:** every ListID directly containing the seed → `{ L_shredEarly, L_shredLate }`. Also every RegionID whose S2 cover contains the field, if the incident were framed by area.
@@ -120,9 +131,11 @@ The traversal returns **both** terminals — the Taco Bell foodservice unit *and
 
 The same traversal produces different responses depending on who asks (§6):
 
-- **Structural (Tier 1)** — any authorized caller gets PII-free identifiers and counts: *"seed reaches 2 shred lots, 1 case, 1 pallet, 2 retail terminals."* No names.
+- **Structural (Tier 1)** — a caller past both gates gets PII-free identifiers and counts: *"seed reaches 2 shred lots, 1 case, 1 pallet, 2 retail terminals."* No names. Salinas Family Farms, as the seed's owner, can reach this tier for its own field — it can raise the alarm and see the blast radius' shape, but not who its customers' customers are.
 - **Identity enumeration (Tier 3)** — only a caller presenting a valid, in-scope **authority credential** gets the holder identities needed to actually place recall calls (which account holds `L_retailGRO`, whom to notify). Every such call writes a `traceforward.invoked` MEAL audit packet (who asked, credential ID, scope, match count) so the exercise of authority is itself tamper-evidently logged.
-- **Self-check (Tier 2, no authority required)** — the authority publishes the incident; any grower/packer/retailer can privately ask *"am I affected?"* and learn only their own answer, via a Merkle inclusion proof, without revealing their field list to anyone.
+- **Self-check (Tier 2, no authority credential)** — the accredited authority publishes the incident; any grower/packer/retailer can privately ask *"am I affected?"* about **their own** holdings and learn only their own answer, via a Merkle inclusion proof, without revealing their field list to anyone. Node-verified identity is still required; what is *not* required is authority.
+
+The invariant across all three: **ownership lets you raise a recall and see its shape; only accredited authority resolves a hash into a company's name.**
 
 ## 4. Why the recall is *complete* — the reasoning, not just the picture
 
@@ -153,13 +166,20 @@ The one-sentence version: **incumbents make a private map of everyone's private 
 
 ## 6. Authorization model (summary; full build spec lives with the workplan)
 
-Trace-forward is protected by **two gates**, and identity disclosure is a **third tier**:
+**The node authorizes; the Hub only routes.** Every traceability query — either direction — is refused unless the node itself verifies that this caller is authorized for this query. Nothing here is available anonymously, and no identifier grants access to what it points at (§2.1).
 
-- **Gate A — functional authority (Hub-issued).** The caller's Hub JWT must carry `capabilities: ["trace-forward"]`. The node verifies it via the Hub JWKS. Being logged in is not enough.
-- **Gate B — seed authorization (at the node), by *either* path:** (i) the caller **owns or is granted** the seed GeoID/RegionID (a grower raising a recall on their own field), **or** (ii) the caller presents a valid, in-scope **authority credential** (a regulator, who owns nothing). Ownership is never *required* when a valid authority credential is present — otherwise the regulator recall is impossible.
-- **Tiers of response:** structural counts (Tier 1) for anyone past both gates; **holder identities (Tier 3)** only with the authority credential; owner-published incident + downstream **self-check (Tier 2)** needs no authority. Every Tier-3 call is written to the MEAL audit ledger.
+| Query | What the node requires |
+|---|---|
+| **Trace-back** (product to fields) | A valid, unexpired, unrevoked **grant/ownership for that product**, verified at the node. No authority credential. A caller without a grant for the artifact is refused and is not even told it exists. |
+| **Trace-forward, structural** (Tier 1) | **Gate A** + **Gate B** (below). Returns hashes and counts only — never party names. |
+| **Trace-forward, identities** (Tier 3) | Gate A + Gate B **and** a valid, in-scope **authority credential**. Audited on every call. |
+| **Self-check** (Tier 2) | Node-verified identity, scoped to the caller's **own** holdings. No authority credential. |
 
-The invariant to remember: **ownership lets you *raise* a recall; only a valid authority credential lets you *see downstream identities*.**
+- **Gate A — functional authority (Hub-issued).** The caller's Hub JWT must carry `capabilities: ["trace-forward"]`. The node verifies it via the Hub JWKS. Being logged in is not enough; the Hub grants the *function* to accredited accounts only.
+- **Gate B — seed authorization (at the node), by *either* path:** (i) the caller **owns or is granted** the seed GeoID/RegionID (a grower raising a recall on their own field), **or** (ii) the caller presents a valid, in-scope **authority credential** (an accredited authority, which owns nothing). Ownership is never *required* when a valid authority credential is present — otherwise the recall by an authority is impossible.
+- **"Accredited," not "official."** The authority credential is issued under Hub accreditation with a StatusList revocation range. Being a food-safety or public-health professional confers nothing on its own; the credential does, it can be scoped (jurisdiction, validity window), it can be **revoked**, and an expired, revoked, or out-of-scope credential is rejected outright. Every Tier-3 use is written to the MEAL audit ledger, so the exercise of authority is reviewable after the fact.
+
+The invariant to remember: **holding product lets you trace back; owning the seed lets you *raise* a recall and see its shape; only a valid, accredited authority credential lets you *see downstream identities*.**
 
 ## 7. How this maps to the code on this branch
 
@@ -169,6 +189,7 @@ The invariant to remember: **ownership lets you *raise* a recall; only a valid a
 | `POST /list-artifact`, `POST /region-artifact`, `GET /list-artifact/{id}`, `GET /list-artifact/reverse/{geoid}` | `app/routers/traceforward.py` |
 | Merkle root / member canonicalization (byte-identical to Pancake) | `app/merkle.py` |
 | S2 cover reuse for GeoID and RegionID | `app/s2_services.py` |
+| Node-side credential verification (the enforcement point) | `app/grant_verifier.py` (`verify_sdjwt_grant`), `app/auth.py` (`verify_field_grant`) |
 | Authority gating (Gate A / Gate B / tiers) | building on `app/auth.py` |
 
 For the full build sequence, acceptance tests, and the authorization spec, see the sprint workplan (`doc/rajat_day2and3_workplan_20260804.md` in the planning repo) and the design memo `doc/rajat_ar2_traceforward_20260724.md`.

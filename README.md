@@ -8,7 +8,7 @@ It stores high-resolution field boundary geometries and verifies field access cr
 
 ### Key Features
 * **Identity Resolution Engine**: Prevents duplicated fields in the global registry. If a farm is registered twice (overlapping by a configurable `threshold`, defaulting to 95%), the node seamlessly aliases the new registration to the existing `Geo Id`. Furthermore, it supports hierarchical **`child_of`** relationship mapping for sub-plots completely contained within a larger farm boundary.
-* **Trace-Back and Trace-Forward**: Content-derived **ListArtifacts** (Merkle-root `ListID`s over GeoIDs, nested lists, and regions) and **RegionArtifacts** (`RegionID`s over an S2 cover, from WKT or member fields) turn the registry into a recall graph. Trace-back (product to fields) is self-service; **trace-forward** (a contaminated field to every downstream product) is authority-gated and audited. See [TRACEABILITY.md](./TRACEABILITY.md) for the full reasoning, a worked cyclospora recall example, and a contrast with existing traceability platforms.
+* **Trace-Back and Trace-Forward**: Content-derived **ListArtifacts** (Merkle-root `ListID`s over GeoIDs, nested lists, and regions) and **RegionArtifacts** (`RegionID`s over an S2 cover, from WKT or member fields) turn the registry into a recall graph. Neither direction is open: the **node** verifies the caller's credential on every query. Trace-back (product to fields) requires a grant for the product being traced; **trace-forward** (a contaminated field to every downstream product) additionally requires a Hub-issued capability and seed authorization, and revealing downstream *identities* requires an accredited authority credential and is audited. See [TRACEABILITY.md](./TRACEABILITY.md) for the full reasoning, a worked cyclospora recall example, and a contrast with existing traceability platforms.
 
 ## Architecture
 
@@ -65,7 +65,7 @@ Follow these steps to run the Node locally alongside the `ar2-hub` and `Pancake`
 | `POST` | `/list-artifact` | Registers a content-derived list (a lot/case/pallet/retail item) over GeoIDs, nested lists (`L:`), or regions (`R:`). Append-only. | Yes (Hub JWT) |
 | `POST` | `/region-artifact` | Registers a content-derived region from a WKT boundary (no acreage cap) or from member GeoIDs/lists. | Yes (Hub JWT) |
 | `GET`  | `/list-artifact/{list_id}` | Returns the members of a list artifact. | Yes (Hub JWT) |
-| `GET`  | `/list-artifact/reverse/{geoid}` | Trace-forward: every list/region containing a GeoID, climbed recursively to terminal products. | Yes (Hub JWT; authority gating for identity tier) |
+| `GET`  | `/list-artifact/reverse/{geoid}` | Trace-forward: every list/region containing a GeoID, climbed recursively to terminal products. | Yes (Hub JWT + `trace-forward` capability + seed authorization; accredited authority credential for the identity tier) |
 
 See [TRACEABILITY.md](./TRACEABILITY.md) for how these endpoints compose into trace-back and trace-forward.
 
