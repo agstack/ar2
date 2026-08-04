@@ -50,7 +50,6 @@ class GeoIDAlias(Base):
     created_at = Column(DateTime, default=get_utc_now)
     relation = Column(Enum('same_as', 'child_of', name='relation_enum'), nullable=False)
 class ListArtifact(Base):
-    """Content-derived list artifact. list_id is the Merkle root over its members."""
     __tablename__ = 'list_artifact'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -60,7 +59,6 @@ class ListArtifact(Base):
 from sqlalchemy import UniqueConstraint
 
 class ListMemberEdge(Base):
-    """Reverse edge: geoid -> list_id"""
     __tablename__ = 'listmember_edge'
     __table_args__ = (
         UniqueConstraint('geoid', 'list_id', name='uix_listmember_edge_geoid_listid'),
@@ -71,9 +69,38 @@ class ListMemberEdge(Base):
     list_id = Column(String(64), ForeignKey('list_artifact.list_id', ondelete='CASCADE'), index=True, nullable=False)
 
 class ListParentEdge(Base):
-    """Recursive composition: child_list_id -> parent_list_id"""
     __tablename__ = 'list_parent_edge'
+    __table_args__ = (
+        UniqueConstraint('child_list_id', 'parent_list_id', name='uix_list_parent_edge'),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     child_list_id = Column(String(64), index=True, nullable=False)
+    parent_list_id = Column(String(64), ForeignKey('list_artifact.list_id', ondelete='CASCADE'), index=True, nullable=False)
+
+class RegionArtifact(Base):
+    __tablename__ = 'region_artifact'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    region_id = Column(String(64), unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=get_utc_now)
+
+class RegionCoverCell(Base):
+    __tablename__ = 'region_cover_cell'
+    __table_args__ = (
+        UniqueConstraint('region_id', 's2_cell', name='uix_region_cover_cell'),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    region_id = Column(String(64), ForeignKey('region_artifact.region_id', ondelete='CASCADE'), index=True, nullable=False)
+    s2_cell = Column(String(32), index=True, nullable=False)
+
+class RegionParentEdge(Base):
+    __tablename__ = 'region_parent_edge'
+    __table_args__ = (
+        UniqueConstraint('child_region_id', 'parent_list_id', name='uix_region_parent_edge'),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    child_region_id = Column(String(64), ForeignKey('region_artifact.region_id', ondelete='CASCADE'), index=True, nullable=False)
     parent_list_id = Column(String(64), ForeignKey('list_artifact.list_id', ondelete='CASCADE'), index=True, nullable=False)
