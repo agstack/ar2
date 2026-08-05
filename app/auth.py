@@ -17,21 +17,59 @@ def get_issuer_pubkey():
     with open(key_path, "rb") as f:
         return f.read()
 
+from typing import Optional
+from app.grant_verifier import verify_sdjwt_grant, verify_authority_credential
+
+def get_jti(token: str) -> str:
+    try:
+        t = token.split("~")[0]
+        unverified = jwt.decode(t, options={"verify_signature": False})
+        return unverified.get("jti", "unknown")
+    except:
+        return "unknown"
+
 def verify_field_grant(grant_token: str, requested_geoid: str) -> bool:
+    try:
+        res = authorize_artifact(grant_token=grant_token, geoid=requested_geoid, raise_404_on_fail=True)
+        return res.get("authorized", False)
+    except Exception:
+        return False
+
+def authorize_artifact(
+    grant_token: Optional[str] = None,
+    authority_token: Optional[str] = None,
+    list_id: Optional[str] = None,
+    geoid: Optional[str] = None,
+    raise_404_on_fail: bool = True
+) -> dict:
     pubkey = get_issuer_pubkey()
     if not pubkey:
-        return False
-    try:
-        test_dir = os.getenv("TEST_STATUS_LIST_DIR")
-        return verify_sdjwt_grant(
-            sd_jwt=grant_token,
-            public_key_pem=pubkey,
-            requested_geoid=requested_geoid,
-            local_status_list_path=test_dir
-        )
-    except Exception as e:
-        print(f"Grant verification failed ({e}). Falling back to L0.")
-        return False
+        raise HTTPException(status_code=401, detail="Issuer public key not configured")
+        
+    test_dir = os.getenv("TEST_STATUS_LIST_DIR")
+    
+    # Path (ii): Authority Credential
+    if authority_token:
+        try:
+            if verify_authority_credential(authority_token, pubkey, None, test_dir):
+                return {"authorized": True, "used_authority": True, "authority_jti": get_jti(authority_token)}
+        except Exception as e:
+            if not raise_404_on_fail:
+                raise HTTPException(status_code=401, detail=f"Authority credential invalid: {e}")
+            pass
+            
+    # Path (i): Grant/Ownership
+    if grant_token:
+        try:
+            if verify_sdjwt_grant(grant_token, pubkey, requested_geoid=geoid, requested_list_id=list_id, local_status_list_path=test_dir):
+                return {"authorized": True, "used_authority": False}
+        except Exception as e:
+            pass
+            
+    if raise_404_on_fail:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized for this seed")
 
 @lru_cache()
 def get_jwks_client():

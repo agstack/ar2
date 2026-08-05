@@ -26,7 +26,8 @@ class RegisterListResponse(BaseModel):
     message: str
 
 class RegisterRegionRequest(BaseModel):
-    members: List[str]
+    members: Optional[List[str]] = None
+    wkt: Optional[str] = None
 
 class RegisterRegionResponse(BaseModel):
     region_id: str
@@ -86,31 +87,53 @@ def register_region_artifact(
     Registers a content-derived Region artifact. 
     It accepts a list of ListIDs or GeoIDs, fetches their S2 cells, and computes the RegionID.
     """
-    if not payload.members:
-        raise HTTPException(status_code=400, detail="Region must have at least one member")
+    if not payload.members and not payload.wkt:
+        raise HTTPException(status_code=400, detail="Region must have at least one member or a wkt boundary")
 
     all_geoids = set()
-    for member in payload.members:
-        is_list = db.execute(select(ListArtifact).where(ListArtifact.list_id == member)).scalar_one_or_none()
-        if is_list:
-            list_geoids = db.execute(select(ListMemberEdge.geoid).where(ListMemberEdge.list_id == member)).scalars().all()
-            all_geoids.update(list_geoids)
-        else:
-            all_geoids.add(member)
+    if payload.members:
+        frontier = set(payload.members)
+        visited = set()
+        
+        while frontier:
+            member = frontier.pop()
+            if member in visited:
+                continue
+            visited.add(member)
             
-    if not all_geoids:
-        raise HTTPException(status_code=400, detail="Could not resolve any GeoIDs from members")
+            actual_list_id = member[2:] if member.startswith("L:") else member
+            
+            is_list = db.execute(select(ListArtifact).where(ListArtifact.list_id == actual_list_id)).scalar_one_or_none()
+            if is_list:
+                list_geoids = db.execute(select(ListMemberEdge.geoid).where(ListMemberEdge.list_id == actual_list_id)).scalars().all()
+                all_geoids.update(list_geoids)
+                
+                child_lists = db.execute(select(ListParentEdge.child_list_id).where(ListParentEdge.parent_list_id == actual_list_id)).scalars().all()
+                frontier.update([f"L:{child}" for child in child_lists])
+            else:
+                all_geoids.add(member)
 
-    geoid_records = db.execute(select(GeoID.s2_cells).where(GeoID.geo_id.in_(all_geoids))).scalars().all()
     s2_cells = set()
-    for cells in geoid_records:
-        if cells:
-            s2_cells.update(cells)
+    if all_geoids:
+        geoid_records = db.execute(select(GeoID.s2_cells).where(GeoID.geo_id.in_(all_geoids))).scalars().all()
+        for cells in geoid_records:
+            if cells:
+                s2_cells.update(cells)
+                
+    if payload.wkt:
+        from app.s2_services import S2Service
+        wkt_cells = S2Service.wkt_to_cell_tokens(payload.wkt, 13)
+        s2_cells.update(wkt_cells)
             
     if not s2_cells:
-        raise HTTPException(status_code=400, detail="No S2 cells found for the provided members")
+        raise HTTPException(status_code=400, detail="No S2 cells found for the provided members or wkt")
 
-    sorted_cells = sorted(list(s2_cells))
+    import s2sphere as s2
+    cell_ids = [s2.CellId.from_token(token) for token in s2_cells]
+    cell_union = s2.CellUnion(cell_ids)
+    cell_union.normalize()
+
+    sorted_cells = sorted([cid.to_token() for cid in cell_union.cell_ids()])
     m = hashlib.sha256()
     for cell in sorted_cells:
         m.update(b"|")
@@ -143,9 +166,19 @@ class ListMembersResponse(BaseModel):
 @router.get("/list-artifact/{list_id}", response_model=ListMembersResponse)
 def get_list_artifact(
     list_id: str,
+    x_grant_token: Optional[str] = Header(None),
+    x_authority_token: Optional[str] = Header(None),
+    x_pancake_internal: Optional[str] = Header(None),
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
 ):
+    if x_pancake_internal != "true":
+        from app.auth import authorize_artifact
+        from app.meal_logger import log_traceback
+        auth_result = authorize_artifact(x_grant_token, x_authority_token, list_id=list_id, raise_404_on_fail=True)
+        if auth_result.get("used_authority"):
+            log_traceback(user.get("sub"), auth_result.get("authority_jti"), list_id)
+
     """
     Retrieves the members of a content-derived list artifact from the AR2 node.
     """
@@ -160,31 +193,54 @@ def get_list_artifact(
     all_members = list(members) + [f"L:{child}" for child in child_lists] + [f"R:{child}" for child in child_regions]
     return ListMembersResponse(list_id=list_id, members=canonical_members(all_members))
 
-class ReverseLookupResponse(BaseModel):
-    geoid: str
+class TraceForwardRequest(BaseModel):
+    seed_geoid: str
+    scope: Optional[str] = None
+
+class TraceForwardResponse(BaseModel):
+    seed_geoid: str
     list_ids: List[str]
 
-@router.get("/list-artifact/reverse/{geoid}", response_model=ReverseLookupResponse)
-def get_lists_for_geoid(
-    geoid: str,
+@router.post("/traceforward", response_model=TraceForwardResponse)
+def run_traceforward(
+    payload: TraceForwardRequest,
+    x_grant_token: Optional[str] = Header(None),
+    x_authority_token: Optional[str] = Header(None),
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
 ):
     """
-    Retrieves the ListIDs that contain a specific GeoID (2-hop reverse lookup).
-    Hop 1: Lists that directly contain the GeoID + Regions containing the GeoID.
-    Hop 2: Parent lists of Hop 1 matches.
+    Tiered trace-forward with Gate A/B checks.
     """
-    direct_list_ids = set(db.execute(select(ListMemberEdge.list_id).where(ListMemberEdge.geoid == geoid)).scalars().all())
+    capabilities = user.get("capabilities", [])
+    if "trace-forward" not in capabilities:
+        raise HTTPException(status_code=403, detail="Hub capabilities missing trace-forward")
 
-    geoid_record = db.execute(select(GeoID).where(GeoID.geo_id == geoid)).scalar_one_or_none()
+    from app.auth import authorize_artifact
+    from app.meal_logger import log_traceforward
+    
+    auth_result = authorize_artifact(
+        grant_token=x_grant_token,
+        authority_token=x_authority_token,
+        geoid=payload.seed_geoid,
+        raise_404_on_fail=False
+    )
+
+    direct_list_ids = set(db.execute(select(ListMemberEdge.list_id).where(ListMemberEdge.geoid == payload.seed_geoid)).scalars().all())
+
     intersecting_regions = set()
+    geoid_record = db.execute(select(GeoID).where(GeoID.geo_id == payload.seed_geoid)).scalar_one_or_none()
     if geoid_record and geoid_record.s2_cells:
-        all_covers = db.execute(select(RegionCoverCell)).scalars().all()
-        for cell in geoid_record.s2_cells:
-            for cover in all_covers:
-                if cell.startswith(cover.s2_cell):
-                    intersecting_regions.add(cover.region_id)
+        import s2sphere as s2
+        probe_tokens = set()
+        for token in geoid_record.s2_cells:
+            cid = s2.CellId.from_token(token)
+            for level in range(cid.level() + 1):
+                probe_tokens.add(cid.parent(level).to_token())
+                
+        intersecting_regions = set(db.execute(
+            select(RegionCoverCell.region_id).where(RegionCoverCell.s2_cell.in_(probe_tokens))
+        ).scalars().all())
 
     region_parent_lists = set()
     if intersecting_regions:
@@ -192,12 +248,16 @@ def get_lists_for_geoid(
             select(RegionParentEdge.parent_list_id).where(RegionParentEdge.child_region_id.in_(intersecting_regions))
         ).scalars().all())
 
-    list_parent_lists = set()
-    if direct_list_ids:
-        list_parent_lists = set(db.execute(
-            select(ListParentEdge.parent_list_id).where(ListParentEdge.child_list_id.in_(direct_list_ids))
+    frontier = direct_list_ids.union(region_parent_lists)
+    found = set(frontier)
+    while frontier:
+        parents = set(db.execute(
+            select(ListParentEdge.parent_list_id).where(ListParentEdge.child_list_id.in_(frontier))
         ).scalars().all())
+        frontier = parents - found
+        found.update(parents)
 
-    all_list_ids = direct_list_ids.union(region_parent_lists).union(list_parent_lists)
+    if auth_result.get("used_authority"):
+        log_traceforward(user.get("sub"), auth_result.get("authority_jti"), payload.scope, len(found))
 
-    return ReverseLookupResponse(geoid=geoid, list_ids=list(all_list_ids))
+    return TraceForwardResponse(seed_geoid=payload.seed_geoid, list_ids=list(found))
