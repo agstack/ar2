@@ -11,8 +11,10 @@ from app.database import get_db
 from app.models.geo_id_model import (
     ListArtifact, ListMemberEdge, ListParentEdge,
     RegionArtifact, RegionCoverCell, RegionParentEdge,
-    GeoID
+    GeoID, GeoIDAlias
 )
+import httpx
+import os
 from app.merkle import merkle_root, canonical_members
 import hashlib
 
@@ -163,6 +165,11 @@ class ListMembersResponse(BaseModel):
     list_id: str
     members: List[str]
 
+import hmac
+def _is_trusted_internal(token: Optional[str]) -> bool:
+    expected = os.getenv("AR2_INTERNAL_SHARED_SECRET")
+    return bool(expected) and bool(token) and hmac.compare_digest(token, expected)
+
 @router.get("/list-artifact/{list_id}", response_model=ListMembersResponse)
 def get_list_artifact(
     list_id: str,
@@ -172,7 +179,7 @@ def get_list_artifact(
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
 ):
-    if x_pancake_internal != "true":
+    if not _is_trusted_internal(x_pancake_internal):
         from app.auth import authorize_artifact
         from app.meal_logger import log_traceback
         auth_result = authorize_artifact(x_grant_token, x_authority_token, list_id=list_id, raise_404_on_fail=True)
@@ -197,13 +204,46 @@ class TraceForwardRequest(BaseModel):
     seed_geoid: str
     scope: Optional[str] = None
 
+class TraceMatch(BaseModel):
+    list_id: str
+    holder_account: Optional[str] = None
+
 class TraceForwardResponse(BaseModel):
     seed_geoid: str
+    tier: int
+    match_count: int
     list_ids: List[str]
+    matches: List[TraceMatch]
+
+def _resolve_holders(list_ids: set[str], hub_jwt: str) -> dict[str, str]:
+    """Tier-3 only: ask Pancake who holds each matched artifact."""
+    pancake_url = os.getenv("PANCAKE_URL", "http://localhost:8100")
+    try:
+        resp = httpx.post(f"{pancake_url}/fieldlists/holders",
+                          json={"list_ids": sorted(list_ids)},
+                          headers={"Authorization": f"Bearer {hub_jwt}"}, timeout=10)
+        resp.raise_for_status()
+        return resp.json().get("holders", {})
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"holder resolution failed: {e}")
+
+def _equivalence_set(db: Session, seed: str) -> set[str]:
+    """Seed + all GeoIDs that are the same physical field (same_as, both directions)."""
+    canonical = db.execute(
+        select(GeoIDAlias.canonical_geo_id)
+        .where(GeoIDAlias.alias_content_hash == seed, GeoIDAlias.relation == "same_as")
+    ).scalars().all()
+    roots = {seed, *canonical}
+    aliases = db.execute(
+        select(GeoIDAlias.alias_content_hash)
+        .where(GeoIDAlias.canonical_geo_id.in_(roots), GeoIDAlias.relation == "same_as")
+    ).scalars().all()
+    return roots | set(aliases)
 
 @router.post("/traceforward", response_model=TraceForwardResponse)
 def run_traceforward(
     payload: TraceForwardRequest,
+    request: Request,
     x_grant_token: Optional[str] = Header(None),
     x_authority_token: Optional[str] = Header(None),
     user: dict = Depends(require_hub_user),
@@ -216,6 +256,9 @@ def run_traceforward(
     if "trace-forward" not in capabilities:
         raise HTTPException(status_code=403, detail="Hub capabilities missing trace-forward")
 
+    if x_authority_token and not payload.scope:
+        raise HTTPException(status_code=400, detail="scope is required with an authority credential")
+
     from app.auth import authorize_artifact
     from app.meal_logger import log_traceforward
     
@@ -223,24 +266,30 @@ def run_traceforward(
         grant_token=x_grant_token,
         authority_token=x_authority_token,
         geoid=payload.seed_geoid,
+        scope=payload.scope,
         raise_404_on_fail=False
     )
 
-    direct_list_ids = set(db.execute(select(ListMemberEdge.list_id).where(ListMemberEdge.geoid == payload.seed_geoid)).scalars().all())
+    seeds = _equivalence_set(db, payload.seed_geoid)
+
+    direct_list_ids = set(db.execute(select(ListMemberEdge.list_id).where(ListMemberEdge.geoid.in_(seeds))).scalars().all())
 
     intersecting_regions = set()
-    geoid_record = db.execute(select(GeoID).where(GeoID.geo_id == payload.seed_geoid)).scalar_one_or_none()
-    if geoid_record and geoid_record.s2_cells:
+    geoid_records = db.execute(select(GeoID).where(GeoID.geo_id.in_(seeds))).scalars().all()
+    if geoid_records:
         import s2sphere as s2
         probe_tokens = set()
-        for token in geoid_record.s2_cells:
-            cid = s2.CellId.from_token(token)
-            for level in range(cid.level() + 1):
-                probe_tokens.add(cid.parent(level).to_token())
+        for geoid_record in geoid_records:
+            if geoid_record.s2_cells:
+                for token in geoid_record.s2_cells:
+                    cid = s2.CellId.from_token(token)
+                    for level in range(cid.level() + 1):
+                        probe_tokens.add(cid.parent(level).to_token())
                 
-        intersecting_regions = set(db.execute(
-            select(RegionCoverCell.region_id).where(RegionCoverCell.s2_cell.in_(probe_tokens))
-        ).scalars().all())
+        if probe_tokens:
+            intersecting_regions = set(db.execute(
+                select(RegionCoverCell.region_id).where(RegionCoverCell.s2_cell.in_(probe_tokens))
+            ).scalars().all())
 
     region_parent_lists = set()
     if intersecting_regions:
@@ -257,7 +306,24 @@ def run_traceforward(
         frontier = parents - found
         found.update(parents)
 
-    if auth_result.get("used_authority"):
-        log_traceforward(user.get("sub"), auth_result.get("authority_jti"), payload.scope, len(found))
+    tier = 3 if auth_result.get("used_authority") else 1
+    
+    # We need the raw_hub_token. Since get_current_user parses it, we can extract it from the request headers
+    raw_hub_token = ""
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        raw_hub_token = auth_header.split(" ")[1]
 
-    return TraceForwardResponse(seed_geoid=payload.seed_geoid, list_ids=list(found))
+    holders = _resolve_holders(found, raw_hub_token) if tier == 3 else {}
+    matches = [TraceMatch(list_id=lid, holder_account=holders.get(lid)) for lid in sorted(found)]
+
+    if tier == 3:
+        log_traceforward(user.get("sub"), auth_result.get("authority_jti"), payload.seed_geoid, payload.scope, len(found))
+
+    return TraceForwardResponse(
+        seed_geoid=payload.seed_geoid,
+        tier=tier,
+        match_count=len(found),
+        list_ids=sorted(found),
+        matches=matches
+    )

@@ -11,7 +11,10 @@ load_dotenv()
 DEFAULT_TESTKIT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../pancake/services/pancake_services/grants/testkit/dev_keys"))
 TESTKIT_DIR = os.getenv("TESTKIT_DIR", DEFAULT_TESTKIT_DIR)
 os.environ["AR_TRUSTED_ISSUER_PUBKEY"] = os.path.join(TESTKIT_DIR, "dev_issuer_public.pem")
-os.environ["TEST_STATUS_LIST_DIR"] = TESTKIT_DIR
+
+@pytest.fixture(autouse=True)
+def set_test_status_list_dir(monkeypatch):
+    monkeypatch.setenv("TEST_STATUS_LIST_DIR", TESTKIT_DIR)
 
 from app.main import app
 from app.database import Base, engine, get_db, SessionLocal

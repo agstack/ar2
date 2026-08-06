@@ -188,22 +188,13 @@ def verify_authority_credential(
     if claims.get("vct") != AUTHORITY_VCT:
         raise VerificationError(f"unexpected vct: {claims.get('vct')}")
 
-    disclosed_scopes = []
-    if disclosures:
-        sd_digests = set(claims.get("_sd", []))
-        for encoded in disclosures:
-            digest = _b64url(hashlib.sha256(encoded.encode("ascii")).digest())
-            if digest in sd_digests:
-                try:
-                    decoded_json = _b64url_decode(encoded)
-                    salt, claim_name, value = json.loads(decoded_json)
-                    if claim_name.startswith("scopes."):
-                        disclosed_scopes.append(value)
-                except:
-                    pass
-
-    if requested_scope and requested_scope not in disclosed_scopes and "global" not in disclosed_scopes:
-        raise VerificationError(f"requested scope {requested_scope} not in credential scopes")
+    scope_claim = claims.get("scope")
+    cred_scopes = scope_claim if isinstance(scope_claim, list) else [scope_claim] if scope_claim else []
+    if not cred_scopes:
+        raise VerificationError("authority credential has no scope")
+    if requested_scope and requested_scope not in cred_scopes and "global" not in cred_scopes:
+        raise VerificationError(
+            f"requested scope {requested_scope} not in credential scopes {cred_scopes}")
 
     _verify_status_list(claims, local_status_list_path)
     return True

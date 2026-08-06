@@ -1,14 +1,20 @@
-import logging
 import json
 from typing import Optional
+import os
+import httpx
 
-logger = logging.getLogger("meal_audit")
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter('%(message)s'))
-logger.addHandler(handler)
+def _append_to_meal_chain(packet: dict):
+    pancake_url = os.getenv("PANCAKE_URL", "http://localhost:8100")
+    secret = os.getenv("AR2_INTERNAL_SHARED_SECRET")
+    headers = {"X-Pancake-Internal": secret} if secret else {}
+    
+    try:
+        httpx.post(f"{pancake_url}/audit/events", json=packet, headers=headers, timeout=5)
+    except Exception as e:
+        import logging
+        logging.getLogger("meal_audit").error(f"Failed to append to MEAL chain: {e}")
 
-def log_traceforward(user_sub: str, credential_jti: str, scope: Optional[str], match_count: int):
+def log_traceforward(user_sub: str, credential_jti: str, seed_geoid: str, scope: Optional[str], match_count: int):
     """
     Logs a traceforward.invoked MEAL packet.
     """
@@ -16,10 +22,11 @@ def log_traceforward(user_sub: str, credential_jti: str, scope: Optional[str], m
         "event": "traceforward.invoked",
         "who": user_sub,
         "credential_id": credential_jti,
+        "seed_geoid": seed_geoid,
         "scope": scope or "global",
         "match_count": match_count
     }
-    logger.info(f"MEAL_AUDIT: {json.dumps(packet)}")
+    _append_to_meal_chain(packet)
     
 def log_traceback(user_sub: str, credential_jti: str, artifact_id: str):
     """
@@ -29,6 +36,7 @@ def log_traceback(user_sub: str, credential_jti: str, artifact_id: str):
         "event": "traceback.invoked",
         "who": user_sub,
         "credential_id": credential_jti,
+        "seed_geoid": artifact_id,
         "artifact": artifact_id
     }
-    logger.info(f"MEAL_AUDIT: {json.dumps(packet)}")
+    _append_to_meal_chain(packet)

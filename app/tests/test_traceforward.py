@@ -1,7 +1,13 @@
+import os
+import json
 import pytest
 import uuid
 import s2sphere as s2
 from fastapi.testclient import TestClient
+
+@pytest.fixture(autouse=True)
+def set_test_status_list_dir(monkeypatch):
+    monkeypatch.setenv("TEST_STATUS_LIST_DIR", os.path.abspath(os.path.join(os.path.dirname(__file__), "testkit/dev_keys")))
 
 from app.main import app
 from app.auth import require_hub_user
@@ -13,12 +19,6 @@ from app.main import app
 from unittest.mock import patch
 
 app.dependency_overrides[require_hub_user] = lambda: {"sub": "test@demo.com", "capabilities": ["trace-forward"]}
-
-@pytest.fixture(autouse=True)
-def mock_authorize_artifact():
-    with patch("app.auth.authorize_artifact") as mock_auth:
-        mock_auth.return_value = {"authorized": True, "used_authority": False}
-        yield mock_auth
 
 client = TestClient(app)
 
@@ -57,7 +57,7 @@ def test_four_hop_reverse_lookup():
     retail_id = r4.json()["list_id"]
     
     # Reverse lookup
-    res = client.post("/traceforward", json={"seed_geoid": geoid})
+    res = client.post("/traceforward", json={"seed_geoid": geoid}, headers={"X-Grant-Token": valid_grant_for(geoid)})
     assert res.status_code == 200
     returned = set(res.json()["list_ids"])
     
@@ -81,7 +81,7 @@ def test_manufactured_cycle_terminates():
     db.commit()
     db.close()
     
-    res = client.post("/traceforward", json={"seed_geoid": geoid})
+    res = client.post("/traceforward", json={"seed_geoid": geoid}, headers={"X-Grant-Token": valid_grant_for(geoid)})
     assert res.status_code == 200
     returned = set(res.json()["list_ids"])
     assert l1 in returned
@@ -131,7 +131,7 @@ def test_containment_ancestor_probe():
     db.commit()
     db.close()
     
-    res = client.post("/traceforward", json={"seed_geoid": geoid})
+    res = client.post("/traceforward", json={"seed_geoid": geoid}, headers={"X-Grant-Token": valid_grant_for(geoid)})
     assert res.status_code == 200
     assert list_id in res.json()["list_ids"]
 
@@ -172,7 +172,7 @@ def test_expanding_composition():
     list_B = rB.json()["list_id"]
     
     # reverse on g1 finds both
-    res = client.post("/traceforward", json={"seed_geoid": g1})
+    res = client.post("/traceforward", json={"seed_geoid": g1}, headers={"X-Grant-Token": valid_grant_for(g1)})
     returned = set(res.json()["list_ids"])
     assert list_A in returned
     assert list_B in returned
@@ -191,7 +191,7 @@ def test_three_list_reverse_lookup():
         list_ids.append(res.json()["list_id"])
     
     assert len(set(list_ids)) == 3
-    res_rev = client.post("/traceforward", json={"seed_geoid": common_geoid})
+    res_rev = client.post("/traceforward", json={"seed_geoid": common_geoid}, headers={"X-Grant-Token": valid_grant_for(common_geoid)})
     assert res_rev.status_code == 200
     returned_lists = res_rev.json()["list_ids"]
     assert len(returned_lists) == 3
@@ -209,3 +209,107 @@ def test_pure_geoid_root_regression():
     from app.merkle import merkle_root, canonical_members
     expected = merkle_root(canonical_members(members))
     assert list_id_new == expected
+
+from pathlib import Path
+
+CRED = Path(__file__).parent / "testkit" / "dev_keys"
+
+def _read(name):
+    return (CRED / f"{name}.sdjwt").read_text().strip()
+
+def _hub(capabilities):
+    app.dependency_overrides[require_hub_user] = lambda: {
+        "sub": "authority@demo.agstack.org", "capabilities": capabilities}
+
+def valid_grant_for(geoid: str) -> str:
+    # Mint a valid grant token for this seed
+    import time
+    import sys
+    pancake_path = "/home/rajat/Downloads/rnaura_work/pancake/services"
+    if pancake_path not in sys.path:
+        sys.path.append(pancake_path)
+    from pancake_services.grants import sdjwt
+    from pancake_services.grants.issuer import DEFAULT_ISSUER_ID, DEFAULT_KID
+    pancake_dev_key = Path("/home/rajat/Downloads/rnaura_work/pancake/services/pancake_services/grants/testkit/dev_keys/dev_issuer_private.pem")
+    private_pem = pancake_dev_key.read_bytes()
+    claims = {
+        "iss": DEFAULT_ISSUER_ID,
+        "sub": "owner@demo.com",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 3600,
+        "vct": "agstack.org/credentials/field-access-grant/v1",
+        "status": {"status_list": {"uri": "http://localhost:8100/grants/status-list", "idx": 1}}
+    }
+    disclosures = [geoid]
+    return sdjwt.issue(claims, disclosures, private_pem, DEFAULT_KID)
+
+# 1. Gate A: no capability -> 403
+def test_gate_a_missing_capability_403():
+    _hub([])
+    SEED = create_test_geoid(["111"])
+    r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"})
+    assert r.status_code == 403
+    assert "capabilities" in r.json()["detail"]
+
+# 2. Gate B owner path: valid grant -> 200, and NO holder identities
+def test_gate_b_owner_path_passes_without_identities():
+    _hub(["trace-forward"])
+    SEED = create_test_geoid(["111"])
+    r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
+                    headers={"X-Grant-Token": valid_grant_for(SEED)})
+    assert r.status_code == 200
+    assert "holder_account" not in r.text
+
+# 3. Gate B both paths fail -> 403
+def test_gate_b_no_grant_no_authority_403():
+    _hub(["trace-forward"])
+    SEED = create_test_geoid(["111"])
+    r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"})
+    assert r.status_code == 403
+
+# 4. THE ONE THAT MATTERS: authority owns nothing -> 200 WITH identities
+def test_gate_b_authority_owns_nothing_gets_identities():
+    _hub(["trace-forward"])
+    SEED = create_test_geoid(["111"])
+    with patch("app.routers.traceforward._resolve_holders") as mock_resolve:
+        mock_resolve.return_value = {}
+        r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
+                        headers={"X-Authority-Token": _read("valid_authority")})
+        assert r.status_code == 200
+        assert r.json()["tier"] == 3
+        
+        r1 = client.post("/list-artifact", json={"members": [SEED]})
+        list_id = r1.json()["list_id"]
+        
+        mock_resolve.return_value = {list_id: "test_holder"}
+        r2 = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
+                        headers={"X-Authority-Token": _read("valid_authority")})
+        assert r2.status_code == 200
+        assert r2.json()["tier"] == 3
+        assert any("holder_account" in m for m in r2.json()["matches"])
+
+# 5-7. Credential validity: expired / revoked / out-of-scope -> 401
+@pytest.mark.parametrize("cred", ["expired_authority", "revoked_authority", "outofscope_authority"])
+def test_invalid_authority_credentials_401(cred):
+    _hub(["trace-forward"])
+    SEED = create_test_geoid(["111"])
+    r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
+                    headers={"X-Authority-Token": _read(cred)})
+    assert r.status_code == 401
+
+# 8. Round trip: trace-back an artifact you do not hold, then trace forward
+def test_authority_round_trip():
+    _hub(["trace-forward"])
+    SEED = create_test_geoid(["111"])
+    r1 = client.post("/list-artifact", json={"members": [SEED]})
+    retail_list_id = r1.json()["list_id"]
+    auth = {"X-Authority-Token": _read("valid_authority")}
+    back = client.get(f"/list-artifact/{retail_list_id}", headers=auth)
+    assert back.status_code == 200
+    geoids = [m for m in back.json()["members"] if not m.startswith(("L:", "R:"))]
+    
+    with patch("app.routers.traceforward._resolve_holders") as mock_resolve:
+        mock_resolve.return_value = {retail_list_id: "test_holder"}
+        fwd = client.post("/traceforward", json={"seed_geoid": geoids[0], "scope": "demo-recall"}, headers=auth)
+        assert fwd.status_code == 200
+        assert retail_list_id in [m["list_id"] for m in fwd.json()["matches"]]

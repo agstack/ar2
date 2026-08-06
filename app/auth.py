@@ -17,6 +17,16 @@ def get_issuer_pubkey():
     with open(key_path, "rb") as f:
         return f.read()
 
+@lru_cache()
+def get_authority_pubkey():
+    """Separate trust anchor: authority credentials are accredited by the Hub,
+    NOT by the field-grant issuer. Must be independently rotatable/revocable."""
+    path = os.getenv("AR_TRUSTED_AUTHORITY_PUBKEY")
+    if not path or not os.path.exists(path):
+        return None
+    with open(path, "rb") as f:
+        return f.read()
+
 from typing import Optional
 from app.grant_verifier import verify_sdjwt_grant, verify_authority_credential
 
@@ -40,6 +50,7 @@ def authorize_artifact(
     authority_token: Optional[str] = None,
     list_id: Optional[str] = None,
     geoid: Optional[str] = None,
+    scope: Optional[str] = None,
     raise_404_on_fail: bool = True
 ) -> dict:
     pubkey = get_issuer_pubkey()
@@ -50,8 +61,15 @@ def authorize_artifact(
     
     # Path (ii): Authority Credential
     if authority_token:
+        apub = get_authority_pubkey()
+        if not apub:
+            raise HTTPException(status_code=401, detail="authority trust anchor not configured")
         try:
-            if verify_authority_credential(authority_token, pubkey, None, test_dir):
+            if verify_authority_credential(
+                authority_token, apub,
+                requested_scope=scope,
+                local_status_list_path=test_dir,
+            ):
                 return {"authorized": True, "used_authority": True, "authority_jti": get_jti(authority_token)}
         except Exception as e:
             if not raise_404_on_fail:
@@ -64,7 +82,7 @@ def authorize_artifact(
             if verify_sdjwt_grant(grant_token, pubkey, requested_geoid=geoid, requested_list_id=list_id, local_status_list_path=test_dir):
                 return {"authorized": True, "used_authority": False}
         except Exception as e:
-            pass
+            print("verify_sdjwt_grant error:", e)
             
     if raise_404_on_fail:
         raise HTTPException(status_code=404, detail="Artifact not found")
