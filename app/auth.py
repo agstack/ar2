@@ -82,8 +82,7 @@ def authorize_artifact(
             if verify_sdjwt_grant(grant_token, pubkey, requested_geoid=geoid, requested_list_id=list_id, local_status_list_path=test_dir):
                 return {"authorized": True, "used_authority": False}
         except Exception as e:
-            print("verify_sdjwt_grant error:", e)
-            
+            pass
     if raise_404_on_fail:
         raise HTTPException(status_code=404, detail="Artifact not found")
     else:

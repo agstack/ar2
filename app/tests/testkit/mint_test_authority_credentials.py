@@ -56,10 +56,13 @@ def mint_authority(out_dir: Path) -> dict:
         "expired_authority": base_claims(DEFAULT_ISSUER_ID, now - 3600, idx=2, scope="demo-recall"),
         "revoked_authority": base_claims(DEFAULT_ISSUER_ID, now + 30*24*3600, idx=3, scope="demo-recall"),
         "outofscope_authority": base_claims(DEFAULT_ISSUER_ID, now + 30*24*3600, idx=4, scope="other-jurisdiction"),
+        "global_authority": base_claims(DEFAULT_ISSUER_ID, now + 30*24*3600, idx=5, scope="global"),
+        "untrusted_authority": base_claims("untrusted-issuer", now + 30*24*3600, idx=6, scope="demo-recall"),
     }
     
     for name, claims in creds.items():
-        (out_dir / f"{name}.sdjwt").write_text(sdjwt.issue(claims, [], private_pem, DEFAULT_KID))
+        key = private_pem if name != "untrusted_authority" else generate_keypair_pem()[0]
+        (out_dir / f"{name}.sdjwt").write_text(sdjwt.issue(claims, [], key, DEFAULT_KID))
 
     # revoked_authority: set bit 3 in the test status list
     write_status_list(out_dir, revoked_indices=[3])

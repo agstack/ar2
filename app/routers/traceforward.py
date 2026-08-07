@@ -213,15 +213,19 @@ class TraceForwardResponse(BaseModel):
     tier: int
     match_count: int
     list_ids: List[str]
-    matches: List[TraceMatch]
+    matches: Optional[List[TraceMatch]] = None
 
-def _resolve_holders(list_ids: set[str], hub_jwt: str) -> dict[str, str]:
+def _resolve_holders(list_ids: set[str], authority_token: str, scope: str, seed_geoid: str) -> dict[str, str]:
     """Tier-3 only: ask Pancake who holds each matched artifact."""
     pancake_url = os.getenv("PANCAKE_URL", "http://localhost:8100")
+    internal_secret = os.getenv("AR2_INTERNAL_SHARED_SECRET", "")
     try:
         resp = httpx.post(f"{pancake_url}/fieldlists/holders",
-                          json={"list_ids": sorted(list_ids)},
-                          headers={"Authorization": f"Bearer {hub_jwt}"}, timeout=10)
+                          json={"list_ids": sorted(list_ids), "scope": scope, "seed_geoid": seed_geoid},
+                          headers={
+                              "X-Pancake-Internal": internal_secret,
+                              "X-Authority-Token": authority_token
+                          }, timeout=10)
         resp.raise_for_status()
         return resp.json().get("holders", {})
     except Exception as e:
@@ -307,18 +311,13 @@ def run_traceforward(
         found.update(parents)
 
     tier = 3 if auth_result.get("used_authority") else 1
-    
-    # We need the raw_hub_token. Since get_current_user parses it, we can extract it from the request headers
-    raw_hub_token = ""
-    auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        raw_hub_token = auth_header.split(" ")[1]
-
-    holders = _resolve_holders(found, raw_hub_token) if tier == 3 else {}
-    matches = [TraceMatch(list_id=lid, holder_account=holders.get(lid)) for lid in sorted(found)]
 
     if tier == 3:
         log_traceforward(user.get("sub"), auth_result.get("authority_jti"), payload.seed_geoid, payload.scope, len(found))
+        holders = _resolve_holders(found, x_authority_token, payload.scope, payload.seed_geoid)
+        matches = [TraceMatch(list_id=lid, holder_account=holders.get(lid, "unresolved")) for lid in sorted(found)]
+    else:
+        matches = []
 
     return TraceForwardResponse(
         seed_geoid=payload.seed_geoid,

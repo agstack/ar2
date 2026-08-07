@@ -1,0 +1,19 @@
+{
+  "issuer": "did:web:pancake.agstack.org",
+  "kid": "pancake-issuer-1",
+  "list_id": "1ed22991a86cf7123c57dcf5c435f724e133bcffe2f308d2e03312ab4b2cd60d",
+  "geoids": [
+    "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f",
+    "7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f3f1a9f0f36e44c0cb1ad4c2f8e3a",
+    "b1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f3f1a9f0f36e44c0c"
+  ],
+  "status_list_uri": "https://pancake.dev.local/grants/status-list",
+  "revoked_index": 7,
+  "credentials": {
+    "valid.sdjwt": "accept",
+    "expired.sdjwt": "reject: expired",
+    "revoked.sdjwt": "reject: status bit 7 set",
+    "tampered.sdjwt": "reject: signature invalid",
+    "wrong_geoid.sdjwt": "reject: disclosure digest not in _sd"
+  }
+}

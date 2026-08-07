@@ -9,10 +9,13 @@ def _append_to_meal_chain(packet: dict):
     headers = {"X-Pancake-Internal": secret} if secret else {}
     
     try:
-        httpx.post(f"{pancake_url}/audit/events", json=packet, headers=headers, timeout=5)
+        resp = httpx.post(f"{pancake_url}/audit/events", json=packet, headers=headers, timeout=5)
+        resp.raise_for_status()
     except Exception as e:
         import logging
         logging.getLogger("meal_audit").error(f"Failed to append to MEAL chain: {e}")
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail="Audit logging failed") from e
 
 def log_traceforward(user_sub: str, credential_jti: str, seed_geoid: str, scope: Optional[str], match_count: int):
     """

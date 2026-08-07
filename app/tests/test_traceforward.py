@@ -222,26 +222,34 @@ def _hub(capabilities):
         "sub": "authority@demo.agstack.org", "capabilities": capabilities}
 
 def valid_grant_for(geoid: str) -> str:
-    # Mint a valid grant token for this seed
     import time
-    import sys
-    pancake_path = "/home/rajat/Downloads/rnaura_work/pancake/services"
-    if pancake_path not in sys.path:
-        sys.path.append(pancake_path)
-    from pancake_services.grants import sdjwt
-    from pancake_services.grants.issuer import DEFAULT_ISSUER_ID, DEFAULT_KID
-    pancake_dev_key = Path("/home/rajat/Downloads/rnaura_work/pancake/services/pancake_services/grants/testkit/dev_keys/dev_issuer_private.pem")
-    private_pem = pancake_dev_key.read_bytes()
+    import jwt
+    import hashlib
+    import json
+    import base64
+    import secrets
+
+    def _b64url(data: bytes) -> str:
+        return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+    private_pem = (Path(__file__).parent / "testkit" / "dev_keys" / "dev_issuer_private.pem").read_bytes()
+    
+    salt = _b64url(secrets.token_bytes(16))
+    encoded_disclosure = _b64url(json.dumps([salt, "fields.0", geoid]).encode("utf-8"))
+    digest = _b64url(hashlib.sha256(encoded_disclosure.encode("ascii")).digest())
+
     claims = {
-        "iss": DEFAULT_ISSUER_ID,
+        "iss": "did:web:pancake.test",
         "sub": "owner@demo.com",
         "iat": int(time.time()),
         "exp": int(time.time()) + 3600,
         "vct": "agstack.org/credentials/field-access-grant/v1",
-        "status": {"status_list": {"uri": "http://localhost:8100/grants/status-list", "idx": 1}}
+        "status": {"status_list": {"uri": "http://localhost:8100/grants/status-list", "idx": 1}},
+        "_sd": [digest],
+        "_sd_alg": "sha-256"
     }
-    disclosures = [geoid]
-    return sdjwt.issue(claims, disclosures, private_pem, DEFAULT_KID)
+    token = jwt.encode(claims, private_pem, algorithm="EdDSA", headers={"typ": "vc+sd-jwt", "kid": "pancake-test-1"})
+    return f"{token}~{encoded_disclosure}~"
 
 # 1. Gate A: no capability -> 403
 def test_gate_a_missing_capability_403():
@@ -267,11 +275,47 @@ def test_gate_b_no_grant_no_authority_403():
     r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"})
     assert r.status_code == 403
 
+# Matrix Row 4: present | valid for different seed | none | any | 403
+def test_gate_b_grant_for_different_seed_403():
+    _hub(["trace-forward"])
+    SEED = create_test_geoid(["111"])
+    OTHER_SEED = create_test_geoid(["222"])
+    r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
+                    headers={"X-Grant-Token": valid_grant_for(OTHER_SEED)})
+    assert r.status_code == 403
+
+# Matrix Row 6: present | none | valid | missing | 400
+def test_gate_b_authority_missing_scope_400():
+    _hub(["trace-forward"])
+    SEED = create_test_geoid(["111"])
+    r = client.post("/traceforward", json={"seed_geoid": SEED}, # no scope
+                    headers={"X-Authority-Token": _read("valid_authority")})
+    assert r.status_code == 400
+
+# Matrix Row 10: present | none | valid, scope: global | any | 200
+def test_gate_b_authority_global_scope():
+    _hub(["trace-forward"])
+    SEED = create_test_geoid(["111"])
+    with patch("app.routers.traceforward._resolve_holders") as mock_resolve, patch("app.meal_logger._append_to_meal_chain") as mock_audit:
+        mock_resolve.return_value = {}
+        r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "some-other-scope"},
+                        headers={"X-Authority-Token": _read("global_authority")})
+        assert r.status_code == 200
+        assert r.json()["tier"] == 3
+
+# Matrix Row 11: present | none | signed by untrusted key | present | 401
+def test_gate_b_authority_untrusted_key_401():
+    _hub(["trace-forward"])
+    SEED = create_test_geoid(["111"])
+    r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
+                    headers={"X-Authority-Token": _read("untrusted_authority")})
+    assert r.status_code == 401
+
 # 4. THE ONE THAT MATTERS: authority owns nothing -> 200 WITH identities
 def test_gate_b_authority_owns_nothing_gets_identities():
     _hub(["trace-forward"])
     SEED = create_test_geoid(["111"])
-    with patch("app.routers.traceforward._resolve_holders") as mock_resolve:
+    with patch("app.routers.traceforward._resolve_holders") as mock_resolve, patch("app.meal_logger._append_to_meal_chain") as mock_audit:
         mock_resolve.return_value = {}
         r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
                         headers={"X-Authority-Token": _read("valid_authority")})
@@ -279,14 +323,23 @@ def test_gate_b_authority_owns_nothing_gets_identities():
         assert r.json()["tier"] == 3
         
         r1 = client.post("/list-artifact", json={"members": [SEED]})
-        list_id = r1.json()["list_id"]
-        
-        mock_resolve.return_value = {list_id: "test_holder"}
+        retail_list_id = r1.json()["list_id"]
+        mock_resolve.return_value = {retail_list_id: "test_holder"}
         r2 = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
                         headers={"X-Authority-Token": _read("valid_authority")})
         assert r2.status_code == 200
         assert r2.json()["tier"] == 3
-        assert any("holder_account" in m for m in r2.json()["matches"])
+        assert any(m["holder_account"] == "test_holder" for m in r2.json()["matches"])
+
+def test_audit_failure_503():
+    _hub(["trace-forward"])
+    SEED = create_test_geoid(["111"])
+    with patch("app.meal_logger._append_to_meal_chain") as mock_audit:
+        from fastapi import HTTPException
+        mock_audit.side_effect = HTTPException(status_code=503, detail="Audit log failure")
+        r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
+                        headers={"X-Authority-Token": _read("valid_authority")})
+        assert r.status_code == 503
 
 # 5-7. Credential validity: expired / revoked / out-of-scope -> 401
 @pytest.mark.parametrize("cred", ["expired_authority", "revoked_authority", "outofscope_authority"])
@@ -304,12 +357,13 @@ def test_authority_round_trip():
     r1 = client.post("/list-artifact", json={"members": [SEED]})
     retail_list_id = r1.json()["list_id"]
     auth = {"X-Authority-Token": _read("valid_authority")}
-    back = client.get(f"/list-artifact/{retail_list_id}", headers=auth)
-    assert back.status_code == 200
-    geoids = [m for m in back.json()["members"] if not m.startswith(("L:", "R:"))]
-    
-    with patch("app.routers.traceforward._resolve_holders") as mock_resolve:
-        mock_resolve.return_value = {retail_list_id: "test_holder"}
-        fwd = client.post("/traceforward", json={"seed_geoid": geoids[0], "scope": "demo-recall"}, headers=auth)
-        assert fwd.status_code == 200
-        assert retail_list_id in [m["list_id"] for m in fwd.json()["matches"]]
+    with patch("app.meal_logger._append_to_meal_chain") as mock_audit:
+        back = client.get(f"/list-artifact/{retail_list_id}", headers=auth)
+        assert back.status_code == 200
+        geoids = [m for m in back.json()["members"] if not m.startswith(("L:", "R:"))]
+        
+        with patch("app.routers.traceforward._resolve_holders") as mock_resolve:
+            mock_resolve.return_value = {retail_list_id: "test_holder"}
+            fwd = client.post("/traceforward", json={"seed_geoid": geoids[0], "scope": "demo-recall"}, headers=auth)
+            assert fwd.status_code == 200
+            assert retail_list_id in [m["list_id"] for m in fwd.json()["matches"]]
