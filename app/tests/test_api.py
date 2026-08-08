@@ -40,6 +40,20 @@ def mock_auth():
         mock_verify.side_effect = side_effect
         yield mock_verify
 
+def extract_geo_id(res):
+    if res.status_code == 200:
+        return res.json().get("Geo Id")
+    
+    data = res.json()
+    geo_id = data.get("Geo Id")
+    if not geo_id and isinstance(data.get("detail"), dict):
+        detail = data.get("detail")
+        geo_id = detail.get("Geo Id") or detail.get("matched geo ids", [None])[0]
+    
+    if not geo_id:
+        geo_id = "test-geo-id"
+    return geo_id
+
 def test_register_and_fetch_field(mock_auth):
     print("\n\n[TEST] Starting test_register_and_fetch_field")
     print("  -> Step 1: Attempting to register a Field Boundary")
@@ -49,18 +63,7 @@ def test_register_and_fetch_field(mock_auth):
     )
     print(f"  <- Response Code: {res.status_code}")
     assert res.status_code in [200, 400]
-    data = res.json()
-    geo_id = data.get("Geo Id")
-    if not geo_id and isinstance(data.get("detail"), dict):
-        geo_id = data.get("detail").get("Geo Id") or data.get("detail", {}).get("matched geo ids", [None])[0]
-        if not geo_id:
-            geo_id = "test-geo-id"
-    
-    if res.status_code == 400:
-        if "matched geo ids" in res.json().get("detail", {}):
-            geo_id = res.json()["detail"]["matched geo ids"][0]
-        elif "Geo Id" in res.json().get("detail", {}):
-            geo_id = res.json()["detail"]["Geo Id"]
+    geo_id = extract_geo_id(res)
 
     print(f"  -> Extracted Geo ID for subsequent tests: {geo_id}")
 
@@ -96,10 +99,7 @@ def test_fetch_field_wkt(mock_auth):
         "/register-field-boundary",
         json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
     )
-    if res.status_code == 200:
-        geo_id = res.json()["Geo Id"]
-    else:
-        geo_id = res.json()["detail"].get("Geo Id") or res.json()["detail"].get("matched geo ids")[0]
+    geo_id = extract_geo_id(res)
 
     print("  -> Fetching WKT anonymously (should be None)")
     res_l0 = client.get(f"/fetch-field-wkt/{geo_id}")
@@ -119,10 +119,7 @@ def test_eudr_export(mock_auth):
         "/register-field-boundary",
         json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
     )
-    if res.status_code == 200:
-        geo_id = res.json()["Geo Id"]
-    else:
-        geo_id = res.json()["detail"].get("Geo Id") or res.json()["detail"].get("matched geo ids")[0]
+    geo_id = extract_geo_id(res)
 
     print("  -> Testing EUDR Export anonymously (should fail with 401)")
     res_l0 = client.get(f"/geoid/{geo_id}/eudr-export")
@@ -145,10 +142,7 @@ def test_fetch_field_centroid(mock_auth):
         "/register-field-boundary",
         json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
     )
-    if res.status_code == 200:
-        geo_id = res.json()["Geo Id"]
-    else:
-        geo_id = res.json()["detail"].get("Geo Id") or res.json()["detail"].get("matched geo ids")[0]
+    geo_id = extract_geo_id(res)
 
     print("  -> Fetching centroid anonymously (should return L0 masked centroid)")
     res_l0 = client.get(f"/fetch-field-centroid/{geo_id}")
@@ -231,10 +225,7 @@ def test_network_error_degrades_to_l0():
             "/register-field-boundary",
             json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
         )
-        data = res.json()
-        geo_id = data.get("Geo Id")
-        if not geo_id and isinstance(data.get("detail"), dict):
-            geo_id = data.get("detail").get("Geo Id") or data.get("detail").get("matched geo ids", [None])[0]
+        geo_id = extract_geo_id(res)
         
         res_fetch = client.get(f"/resolve/{geo_id}", headers={"Authorization": "Bearer some-token"})
         assert res_fetch.status_code == 200
@@ -274,10 +265,7 @@ def test_real_rs256_auth():
             "/register-field-boundary",
             json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
         )
-        data = res.json()
-        geo_id = data.get("Geo Id") or data.get("detail", {}).get("Geo Id")
-        if not geo_id:
-            geo_id = data.get("detail", {}).get("matched geo ids", [None])[0]
+        geo_id = extract_geo_id(res)
             
         res1 = client.get(f"/resolve/{geo_id}", headers={"Authorization": f"Bearer {token1}"})
         assert res1.status_code == 200

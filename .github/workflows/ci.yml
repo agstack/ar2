@@ -9,6 +9,21 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - uses: actions/checkout@v4
 
@@ -25,6 +40,6 @@ jobs:
 
     - name: Run tests
       env:
-        DATABASE_URL: "sqlite:///:memory:"
+        DATABASE_URL: "postgresql://postgres:password@localhost:5432/test_db"
       run: |
         PYTHONPATH=. pytest app/tests/
