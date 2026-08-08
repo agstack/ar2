@@ -24,5 +24,7 @@ jobs:
         pip install pytest
 
     - name: Run tests
+      env:
+        DATABASE_URL: sqlite:///:memory:
       run: |
         PYTHONPATH=. pytest app/tests/
