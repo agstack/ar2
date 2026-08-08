@@ -18,9 +18,13 @@ SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 if not SQLALCHEMY_DATABASE_URL:
     SQLALCHEMY_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/postgres" # Default to a local postgres
 
+from sqlalchemy.pool import StaticPool
+
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     engine = create_engine(
-        SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+        SQLALCHEMY_DATABASE_URL, 
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool
     )
 else:
     engine = create_engine(SQLALCHEMY_DATABASE_URL)
