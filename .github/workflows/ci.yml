@@ -25,6 +25,6 @@ jobs:
 
     - name: Run tests
       env:
-        DATABASE_URL: sqlite:///:memory:
+        DATABASE_URL: "sqlite:///:memory:"
       run: |
         PYTHONPATH=. pytest app/tests/
