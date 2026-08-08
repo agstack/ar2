@@ -7,10 +7,9 @@ load_dotenv()
 
 
 # Mock environment variables BEFORE importing app components
-# Allow overriding TESTKIT_DIR, defaulting to a relative path assuming pancake is checked out next to ar2
-DEFAULT_TESTKIT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../pancake/services/pancake_services/grants/testkit/dev_keys"))
-TESTKIT_DIR = os.getenv("TESTKIT_DIR", DEFAULT_TESTKIT_DIR)
+TESTKIT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "testkit/dev_keys"))
 os.environ["AR_TRUSTED_ISSUER_PUBKEY"] = os.path.join(TESTKIT_DIR, "dev_issuer_public.pem")
+os.environ["AR_TRUSTED_AUTHORITY_PUBKEY"] = os.path.join(TESTKIT_DIR, "authority_issuer_public.pem")
 
 @pytest.fixture(autouse=True)
 def set_test_status_list_dir(monkeypatch):
@@ -51,9 +50,9 @@ def test_register_and_fetch_field(mock_auth):
     print(f"  <- Response Code: {res.status_code}")
     assert res.status_code in [200, 400]
     data = res.json()
-    geo_id = data.get("Geo Id") or data.get("detail", {}).get("Geo Id")
-    if not geo_id:
-        geo_id = data.get("matched geo ids", [None])[0]
+    geo_id = data.get("Geo Id")
+    if not geo_id and isinstance(data.get("detail"), dict):
+        geo_id = data.get("detail").get("Geo Id") or data.get("detail", {}).get("matched geo ids", [None])[0]
         if not geo_id:
             geo_id = "test-geo-id"
     
@@ -233,9 +232,9 @@ def test_network_error_degrades_to_l0():
             json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
         )
         data = res.json()
-        geo_id = data.get("Geo Id") or data.get("detail", {}).get("Geo Id")
-        if not geo_id:
-            geo_id = data.get("detail", {}).get("matched geo ids", [None])[0]
+        geo_id = data.get("Geo Id")
+        if not geo_id and isinstance(data.get("detail"), dict):
+            geo_id = data.get("detail").get("Geo Id") or data.get("detail").get("matched geo ids", [None])[0]
         
         res_fetch = client.get(f"/resolve/{geo_id}", headers={"Authorization": "Bearer some-token"})
         assert res_fetch.status_code == 200
