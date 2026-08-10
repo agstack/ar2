@@ -17,7 +17,7 @@ def _append_to_meal_chain(packet: dict):
         from fastapi import HTTPException
         raise HTTPException(status_code=503, detail="Audit logging failed") from e
 
-def log_traceforward(user_sub: str, credential_jti: str, seed_geoid: str, scope: Optional[str], match_count: int):
+def log_traceforward(user_sub: str, credential_jti: str, seed_geoid: str, scope: Optional[str], match_count: int, list_ids: list[str]):
     """
     Logs a traceforward.invoked MEAL packet.
     """
@@ -27,7 +27,8 @@ def log_traceforward(user_sub: str, credential_jti: str, seed_geoid: str, scope:
         "credential_id": credential_jti,
         "seed_geoid": seed_geoid,
         "scope": scope or "global",
-        "match_count": match_count
+        "match_count": match_count,
+        "list_ids": list_ids
     }
     _append_to_meal_chain(packet)
     

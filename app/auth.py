@@ -57,8 +57,7 @@ def authorize_artifact(
     if not pubkey:
         raise HTTPException(status_code=401, detail="Issuer public key not configured")
         
-    test_dir = os.getenv("TEST_STATUS_LIST_DIR")
-    
+    test_dir = os.environ.get("TEST_STATUS_LIST_DIR")
     # Path (ii): Authority Credential
     if authority_token:
         apub = get_authority_pubkey()

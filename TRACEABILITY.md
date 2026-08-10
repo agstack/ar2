@@ -150,15 +150,18 @@ flowchart LR
 
 The traversal returns **both** terminals — the Taco Bell foodservice unit *and* the grocer's retail bag lot — even though the original signal only came from the restaurant. That second terminal is the recall's whole value: the grocer's bagged product is on shelves under a QR sticker, and no one had reported illness from it yet. `geoid:CST-C` and the Verde/Salinas fields that co-occurred in those shred runs are visible as siblings, but the *authority* decides the recall scope; the node's job is to make the blast radius complete and provable.
 
-### 3.4 What each caller is allowed to see (tiers)
+### 3.4 Resolution Outputs and Identity Tiers
 
-The same traversal produces different responses depending on who asks (§6):
+The same traversal produces different responses depending on who asks and what they are authorized to see. The `TraceMatch` response model categorizes each result as either a direct `match` (the seed is directly in the list) or `contained` (the list structurally contains the seed via a parent relationship or region inclusion).
 
-- **Structural (Tier 1)** — a caller past both gates gets PII-free identifiers and counts: *"seed reaches 2 shred lots, 1 case, 1 pallet, 2 retail terminals."* No names. Salinas Family Farms, as the seed's owner, can reach this tier for its own field — it can raise the alarm and see the blast radius' shape, but not who its customers' customers are.
-- **Identity enumeration (Tier 3)** — only a caller presenting a valid, in-scope **authority credential** gets the holder identities needed to actually place recall calls (which account holds `L_retailGRO`, whom to notify). Every such call writes a `traceforward.invoked` MEAL audit packet (who asked, credential ID, scope, match count) so the exercise of authority is itself tamper-evidently logged.
-- **Self-check (Tier 2, no authority credential)** — the accredited authority publishes the incident; any grower/packer/retailer can privately ask *"am I affected?"* about **their own** holdings and learn only their own answer, via a Merkle inclusion proof, without revealing their field list to anyone. Node-verified identity is still required; what is *not* required is authority.
+These resolutions map across four identity tiers:
 
-The invariant across all three: **ownership lets you raise a recall and see its shape; only accredited authority resolves a hash into a company's name.**
+- **Tier 1 (Structural)** — A caller past both gates gets PII-free identifiers and counts. No names. The response returns `match` and `contained` resolutions, but no holder identities. An owner can reach this tier for its own field to see the blast radius' shape, but not who its customers' customers are.
+- **Tier 2 (Self-check)** — The accredited authority publishes the incident; any participant can privately ask *"am I affected?"* about **their own** holdings. The system returns `match` or `contained` for their own artifacts via a Merkle inclusion proof, without requiring an authority credential. Unrelated artifacts return `no-match`.
+- **Tier 3 (Identity Enumeration)** — Only a caller presenting a valid, in-scope **authority credential** gets the holder identities needed to actually place recall calls. The response returns `match` and `contained` resolutions along with the resolved holder account names. Every such call writes a `traceforward.invoked` MEAL audit packet.
+- **Tier 4 (Public)** — Fully anonymized or aggregated public reporting. Returns `no-match` for specific artifact queries, preventing structural graph or identity exposure.
+
+The invariant across all tiers: **ownership lets you raise a recall and see its shape; only accredited authority resolves a hash into a company's name; and the distinction between a direct `match` and a structural `contained` result is preserved.**
 
 ## 4. Why the recall is *complete* — the reasoning, not just the picture
 

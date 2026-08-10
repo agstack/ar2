@@ -1,7 +1,7 @@
 """Mint test Authority credentials (vct: agstack.org/credentials/traceforward-authority/v1).
 
 Usage:
-    python -m testkit.mint_test_authority_credentials
+    python -m app.tests.testkit.mint_test_authority_credentials
 
 Generates:
     valid_authority.sdjwt
@@ -9,21 +9,11 @@ Generates:
 """
 from __future__ import annotations
 
-import base64
-import json
 import time
 from pathlib import Path
-
 from ulid import ULID
-import sys
+import jwt
 import os
-
-# Add pancake to path to use its sdjwt libraries for testing
-pancake_path = "/home/rajat/Downloads/rnaura_work/pancake/services"
-sys.path.append(pancake_path)
-
-from pancake_services.grants import sdjwt
-from pancake_services.grants.issuer import DEFAULT_ISSUER_ID, DEFAULT_KID, generate_keypair_pem
 
 STATUS_URI = "http://localhost:8100/grants/status-list"
 AUTHORITY_VCT = "agstack.org/credentials/traceforward-authority/v1"
@@ -41,31 +31,41 @@ def base_claims(issuer_id: str, exp: int, idx: int, scope: str = "demo-recall") 
         "status": {"status_list": {"uri": STATUS_URI, "idx": idx}},
     }
 
-def mint_authority(out_dir: Path) -> dict:
+def generate_keypair_pem():
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from cryptography.hazmat.primitives import serialization
+    private_key = ed25519.Ed25519PrivateKey.generate()
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return private_pem
+
+def mint_authority(out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     
-    pancake_dev_key = Path(__file__).parent.parent.parent / "pancake/services/pancake_services/grants/testkit/dev_keys/dev_issuer_private.pem"
-    
-    AUTHORITY_KEY_PATH = Path(__file__).parent / "dev_keys/authority_issuer_private.pem"
+    AUTHORITY_KEY_PATH = out_dir / "authority_issuer_private.pem"
     private_pem = AUTHORITY_KEY_PATH.read_bytes()
 
     now = int(time.time())
 
     creds = {
-        "valid_authority": base_claims(DEFAULT_ISSUER_ID, now + 30*24*3600, idx=1, scope="demo-recall"),
-        "expired_authority": base_claims(DEFAULT_ISSUER_ID, now - 3600, idx=2, scope="demo-recall"),
-        "revoked_authority": base_claims(DEFAULT_ISSUER_ID, now + 30*24*3600, idx=3, scope="demo-recall"),
-        "outofscope_authority": base_claims(DEFAULT_ISSUER_ID, now + 30*24*3600, idx=4, scope="other-jurisdiction"),
-        "global_authority": base_claims(DEFAULT_ISSUER_ID, now + 30*24*3600, idx=5, scope="global"),
+        "valid_authority": base_claims("did:web:pancake.test", now + 30*24*3600, idx=1, scope="demo-recall"),
+        "expired_authority": base_claims("did:web:pancake.test", now - 3600, idx=2, scope="demo-recall"),
+        "revoked_authority": base_claims("did:web:pancake.test", now + 30*24*3600, idx=3, scope="demo-recall"),
+        "outofscope_authority": base_claims("did:web:pancake.test", now + 30*24*3600, idx=4, scope="other-jurisdiction"),
+        "global_authority": base_claims("did:web:pancake.test", now + 30*24*3600, idx=5, scope="global"),
         "untrusted_authority": base_claims("untrusted-issuer", now + 30*24*3600, idx=6, scope="demo-recall"),
     }
     
     for name, claims in creds.items():
-        key = private_pem if name != "untrusted_authority" else generate_keypair_pem()[0]
-        (out_dir / f"{name}.sdjwt").write_text(sdjwt.issue(claims, [], key, DEFAULT_KID))
+        key = private_pem if name != "untrusted_authority" else generate_keypair_pem()
+        token = jwt.encode(claims, key, algorithm="EdDSA", headers={"typ": "vc+sd-jwt", "kid": "pancake-test-1"})
+        (out_dir / f"{name}.sdjwt").write_text(f"{token}~")
 
-    # revoked_authority: set bit 3 in the test status list
-    write_status_list(out_dir, revoked_indices=[3])
+    # revoked_authority: set bit 3 in the test status list (owner tests use 7)
+    write_status_list(out_dir, revoked_indices=[3, 7])
     print(f"To use them, point AR_TRUSTED_ISSUER_PUBKEY to {out_dir}/authority_issuer_public.pem")
 
 import zlib

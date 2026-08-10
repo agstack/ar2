@@ -19,19 +19,16 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r services/requirements.txt
 
-# 3. Generate fresh cryptographic keys
-cd services/
-python -m pancake_services.grants.testkit.mint_test_credentials
-
+# 3. Cryptographic Keys Configuration
 > [!IMPORTANT]
 > **Issuer Keys Configuration**
 > For security, cryptographic keys are intentionally excluded from the `.env` configuration. You must export them in your shell session before running the services.
 > 
 > Create a shell script (e.g., `demo_env.sh`) containing:
 
-> # You can use the pre-packaged testkit keys for local testing:
-> export PANCAKE_ISSUER_KEY="/absolute/path/to/pancake/services/pancake_services/grants/testkit/dev_keys/dev_issuer_private.pem"
-> export AR_TRUSTED_ISSUER_PUBKEY="/absolute/path/to/pancake/services/pancake_services/grants/testkit/dev_keys/dev_issuer_public.pem"
+> # we reuse the pre-packaged testkit keys for local testing:
+> export PANCAKE_ISSUER_KEY=$(cat ~/pancake/services/pancake_services/grants/testkit/dev_keys/dev_issuer_private.pem)
+> export AR_TRUSTED_ISSUER_PUBKEY=$(cat ~/pancake/services/pancake_services/grants/testkit/dev_keys/dev_issuer_public.pem)
 
 > *(Note: For a secure live demo, generate a dedicated keypair using `pancake_services.grants.issuer.generate_keypair_pem()` instead).*
 
@@ -238,3 +235,11 @@ curl -i -s -X GET "http://127.0.0.1:8000/geoid/<GEOID>/eudr-export" \
 curl -s -X GET "http://127.0.0.1:8000/fetch-field-wkt/<GEOID>" \
   -H "X-Field-Grant: <OWNER_CREDENTIAL>"
 ```
+
+### Test G: MEAL Audit Report
+Verify that Pancake's tamper-evident ledger logged the entire lifecycle.
+```bash
+curl -s -X GET "http://127.0.0.1:8100/audit/<GEOID>/report" \
+  -H "Authorization: Bearer <FARMER_JWT>"
+```
+*Expected:* `HTTP 200 OK` with full signed provenance chain and `"all_chains_valid": true`.

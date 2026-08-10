@@ -200,13 +200,32 @@ def get_list_artifact(
     all_members = list(members) + [f"L:{child}" for child in child_lists] + [f"R:{child}" for child in child_regions]
     return ListMembersResponse(list_id=list_id, members=canonical_members(all_members))
 
+class ListReverseResponse(BaseModel):
+    list_ids: List[str]
+
+@router.get("/list-artifact/reverse/{geoid}", response_model=ListReverseResponse)
+def get_list_artifact_reverse(
+    geoid: str,
+    user: dict = Depends(require_hub_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieves all list IDs that contain the given geoid.
+    """
+    list_ids = db.execute(select(ListMemberEdge.list_id).where(ListMemberEdge.geoid == geoid)).scalars().all()
+    return ListReverseResponse(list_ids=list(list_ids))
+
+
 class TraceForwardRequest(BaseModel):
     seed_geoid: str
     scope: Optional[str] = None
 
+from typing import Literal
+
 class TraceMatch(BaseModel):
     list_id: str
     holder_account: Optional[str] = None
+    resolution: Literal["match", "contained", "no-match"] = "match"
 
 class TraceForwardResponse(BaseModel):
     seed_geoid: str
@@ -301,6 +320,13 @@ def run_traceforward(
             select(RegionParentEdge.parent_list_id).where(RegionParentEdge.child_region_id.in_(intersecting_regions))
         ).scalars().all())
 
+    list_resolutions = {}
+    for lid in direct_list_ids:
+        list_resolutions[lid] = "match"
+    for lid in region_parent_lists:
+        if lid not in list_resolutions:
+            list_resolutions[lid] = "contained"
+
     frontier = direct_list_ids.union(region_parent_lists)
     found = set(frontier)
     while frontier:
@@ -309,15 +335,18 @@ def run_traceforward(
         ).scalars().all())
         frontier = parents - found
         found.update(parents)
+        for lid in parents:
+            if lid not in list_resolutions:
+                list_resolutions[lid] = "contained"
 
     tier = 3 if auth_result.get("used_authority") else 1
 
     if tier == 3:
-        log_traceforward(user.get("sub"), auth_result.get("authority_jti"), payload.seed_geoid, payload.scope, len(found))
+        log_traceforward(user.get("sub"), auth_result.get("authority_jti"), payload.seed_geoid, payload.scope, len(found), list(found))
         holders = _resolve_holders(found, x_authority_token, payload.scope, payload.seed_geoid)
-        matches = [TraceMatch(list_id=lid, holder_account=holders.get(lid, "unresolved")) for lid in sorted(found)]
+        matches = [TraceMatch(list_id=lid, holder_account=holders.get(lid, "unresolved"), resolution=list_resolutions[lid]) for lid in sorted(found)]
     else:
-        matches = []
+        matches = [TraceMatch(list_id=lid, holder_account=None, resolution=list_resolutions[lid]) for lid in sorted(found)]
 
     return TraceForwardResponse(
         seed_geoid=payload.seed_geoid,

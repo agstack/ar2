@@ -76,3 +76,10 @@ To run the automated test suite (which overrides the JWKS hub auth for isolation
 ```bash
 python -m pytest app/tests/test_api.py -v
 ```
+
+## Automated End-to-End Demo
+
+You can run the full end-to-end credential issuance and verification flow using the included bash script. The script covers the full lifecycle (registration, issuance, retrieving, verification, and revocation) and requires both the Hub and Pancake servers to be running locally.
+```bash
+./demo_e2e.sh
+```
