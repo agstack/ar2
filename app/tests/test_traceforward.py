@@ -1,22 +1,22 @@
-import os
 import json
-import pytest
+import os
 import uuid
+
+import pytest
 import s2sphere as s2
 from fastapi.testclient import TestClient
+
 
 @pytest.fixture(autouse=True)
 def set_test_status_list_dir(monkeypatch):
     monkeypatch.setenv("TEST_STATUS_LIST_DIR", os.path.abspath(os.path.join(os.path.dirname(__file__), "testkit/dev_keys")))
 
-from app.main import app
+from unittest.mock import patch
+
 from app.auth import require_hub_user
 from app.database import SessionLocal
-from app.models.geo_id_model import GeoID, ListParentEdge
-import app.auth as auth
 from app.main import app
-
-from unittest.mock import patch
+from app.models.geo_id_model import GeoID, ListParentEdge
 
 app.dependency_overrides[require_hub_user] = lambda: {"sub": "test@demo.com", "capabilities": ["trace-forward"]}
 
@@ -206,7 +206,7 @@ def test_pure_geoid_root_regression():
     res = client.post("/list-artifact", json={"members": members})
     assert res.status_code == 200
     list_id_new = res.json()["list_id"]
-    from app.merkle import merkle_root, canonical_members
+    from app.merkle import canonical_members, merkle_root
     expected = merkle_root(canonical_members(members))
     assert list_id_new == expected
 
@@ -222,12 +222,12 @@ def _hub(capabilities):
         "sub": "authority@demo.agstack.org", "capabilities": capabilities}
 
 def valid_grant_for(geoid: str) -> str:
-    import time
-    import jwt
-    import hashlib
-    import json
     import base64
+    import hashlib
     import secrets
+    import time
+
+    import jwt
 
     def _b64url(data: bytes) -> str:
         return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")

@@ -1,5 +1,7 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
 
 @pytest.fixture(scope="session", autouse=True)
 def mint_credentials():

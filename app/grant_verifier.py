@@ -5,11 +5,10 @@
 import base64
 import hashlib
 import json
-import time
-import zlib
-import urllib.request
 import os
-from typing import List, Tuple
+import time
+import urllib.request
+import zlib
 
 import jwt as pyjwt
 
@@ -27,7 +26,7 @@ def _b64url_decode(data: str) -> bytes:
 def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
-def _split(sd_jwt: str) -> Tuple[str, List[str]]:
+def _split(sd_jwt: str) -> tuple[str, list[str]]:
     if "~" not in sd_jwt:
         return sd_jwt, []
     parts = sd_jwt.split("~")

@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from ulid import ULID
+
 import jwt
-import os
+from ulid import ULID
 
 STATUS_URI = "http://localhost:8100/grants/status-list"
 AUTHORITY_VCT = "agstack.org/credentials/traceforward-authority/v1"
@@ -32,8 +32,8 @@ def base_claims(issuer_id: str, exp: int, idx: int, scope: str = "demo-recall") 
     }
 
 def generate_keypair_pem():
-    from cryptography.hazmat.primitives.asymmetric import ed25519
     from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ed25519
     private_key = ed25519.Ed25519PrivateKey.generate()
     private_pem = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
@@ -69,6 +69,7 @@ def mint_authority(out_dir: Path):
     print(f"To use them, point AR_TRUSTED_ISSUER_PUBKEY to {out_dir}/authority_issuer_public.pem")
 
 import zlib
+
 
 def write_status_list(out_dir: Path, revoked_indices: list[int]):
     import base64

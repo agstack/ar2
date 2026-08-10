@@ -6,23 +6,20 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import json
 import hashlib
-import base64
-import pyproj
+import json
+import os
+
 import geojson
 import geopandas as gpd
-from shapely.wkt import loads as load_wkt
-from shapely.geometry import mapping, shape, Point
+from dotenv import load_dotenv
 from shapely import ops, wkb
-from functools import partial
-from sqlalchemy.orm import Session
+from shapely.geometry import Point, mapping
+from shapely.wkt import loads as load_wkt
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.models.geo_id_model import GeoID, GeoIDAlias
-
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -252,8 +249,7 @@ class Utils:
 
         for key in s2_indexes_to_remove:
             str_key = str(key)
-            if str_key in geo_data:
-                del geo_data[str_key]
+            geo_data.pop(str_key, None)
         return geo_data
     
     @staticmethod
@@ -264,7 +260,7 @@ class Utils:
             geometry = shape(geojson_feature['geometry'])
             return geometry.wkt
         except Exception as e:
-            raise ValueError(f"Failed to convert GeoJSON to WKT: {str(e)}")
+            raise ValueError(f"Failed to convert GeoJSON to WKT: {e!s}")
 
     @staticmethod
     def get_percentage_overlap_two_fields(db: Session, geo_id_field_1: str, geo_id_field_2: str) -> float:
@@ -350,7 +346,7 @@ class Utils:
     @staticmethod
     def get_eudr_multipolygon(wkt_string: str) -> dict:
         import shapely
-        from shapely.geometry import mapping, MultiPolygon, Polygon
+        from shapely.geometry import MultiPolygon, Polygon, mapping
         geom = load_wkt(wkt_string)
         
         # Ensure 2D and 6-decimal precision

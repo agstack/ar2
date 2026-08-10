@@ -6,10 +6,10 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import geopandas as gpd
+import s2sphere as s2
 import shapely
 from shapely.wkt import loads
-import s2sphere as s2
-import geopandas as gpd
 
 
 class S2Service:
@@ -70,7 +70,7 @@ class S2Service:
         for s2_cell_id in s2_cell_ids:
             s2_cell = s2.Cell(s2_cell_id)
             vertices = []
-            for i in range(0, 4):
+            for i in range(4):
                 vertex = s2_cell.get_vertex(i)
                 latlng = s2.LatLng.from_point(vertex)
                 vertices.append((latlng.lng().degrees, latlng.lat().degrees))

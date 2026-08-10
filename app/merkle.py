@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Dict, List
 
 
 def _sha256(data: bytes) -> bytes:
     return hashlib.sha256(data).digest()
 
 
-def canonical_members(geoids: List[str]) -> List[str]:
+def canonical_members(geoids: list[str]) -> list[str]:
     """Deduplicate and sort GeoIDs into canonical (lexicographic) order."""
     if not geoids:
         raise ValueError("a FieldList must contain at least one GeoID")
     return sorted(set(geoids))
 
 
-def _levels(members: List[str]) -> List[List[bytes]]:
+def _levels(members: list[str]) -> list[list[bytes]]:
     """Build all tree levels, leaves first."""
     level = [_sha256(g.encode("utf-8")) for g in members]
     levels = [level]
@@ -30,20 +29,20 @@ def _levels(members: List[str]) -> List[List[bytes]]:
     return levels
 
 
-def merkle_root(geoids: List[str]) -> str:
+def merkle_root(geoids: list[str]) -> str:
     """Compute the ListID (lowercase hex Merkle root) for a set of GeoIDs."""
     members = canonical_members(geoids)
     return _levels(members)[-1][0].hex()
 
 
-def inclusion_proof(geoids: List[str], geoid: str) -> List[Dict[str, str]]:
+def inclusion_proof(geoids: list[str], geoid: str) -> list[dict[str, str]]:
     """Build an inclusion proof (list of {sibling, position} steps) for one GeoID."""
     members = canonical_members(geoids)
     if geoid not in members:
         raise ValueError(f"GeoID not in list: {geoid}")
     levels = _levels(members)
     index = members.index(geoid)
-    proof: List[Dict[str, str]] = []
+    proof: list[dict[str, str]] = []
     for level in levels[:-1]:
         pair_start = index - (index % 2)
         if pair_start + 1 < len(level):
@@ -58,7 +57,7 @@ def inclusion_proof(geoids: List[str], geoid: str) -> List[Dict[str, str]]:
     return proof
 
 
-def verify_inclusion(geoid: str, proof: List[Dict[str, str]], list_id: str) -> bool:
+def verify_inclusion(geoid: str, proof: list[dict[str, str]], list_id: str) -> bool:
     """Verify an inclusion proof against a ListID."""
     node = _sha256(geoid.encode("utf-8"))
     for step in proof:

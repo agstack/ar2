@@ -6,23 +6,33 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import asyncio
 import json
 import random
-from fastapi import APIRouter, HTTPException, Depends, Header, Query, status, UploadFile, File, Body
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
-from typing import Optional, Dict, Any
+import time
+from typing import Any
 
-from app.schemas import FieldRegistrationRequest, FieldRegistrationResponse, PointRegistrationRequest, FetchFieldResponse
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    UploadFile,
+)
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+
+from app.auth import require_hub_user
 from app.database import get_db
 from app.models import GeoID
-from app.utils import Utils, GeoDataUtils
 from app.s2_services import S2Service
-from app.auth import require_hub_user
-
-import asyncio
-from fastapi.responses import StreamingResponse
-import time
+from app.schemas import (
+    FieldRegistrationRequest,
+    FieldRegistrationResponse,
+)
+from app.utils import GeoDataUtils, Utils
 
 router = APIRouter(prefix="", tags=["Field Registration"])
 
@@ -30,7 +40,7 @@ router = APIRouter(prefix="", tags=["Field Registration"])
 @router.post("/register-field-boundary", response_model=FieldRegistrationResponse)
 async def register_field_boundary(
     payload: FieldRegistrationRequest,
-    automated_field: Optional[int] = Header(None, alias="AUTOMATED-FIELD"),
+    automated_field: int | None = Header(None, alias="AUTOMATED-FIELD"),
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
     ):
@@ -148,7 +158,7 @@ async def register_field_boundary(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Register Field Boundary Error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Register Field Boundary Error: {e!s}")
 
 
 # @router.post("/register-field-boundaries-geojson", tags=["Field Registration"])
@@ -332,9 +342,9 @@ async def register_field_boundary(
 
 @router.post("/register-field-boundaries-geojson", tags=["Field Registration"])
 async def register_field_boundaries_geojson(
-    file: Optional[UploadFile] = File(None),
-    payload: Optional[Dict[str, Any]] = Body(None),
-    automated_field: Optional[int] = Header(None, alias="AUTOMATED-FIELD"),
+    file: UploadFile | None = File(None),
+    payload: dict[str, Any] | None = Body(None),
+    automated_field: int | None = Header(None, alias="AUTOMATED-FIELD"),
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
 ):
@@ -351,7 +361,7 @@ async def register_field_boundaries_geojson(
         if data.get('type') != 'FeatureCollection' or 'features' not in data:
             raise HTTPException(status_code=400, detail="Invalid GeoJSON FeatureCollection format")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Request Error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Request Error: {e!s}")
 
     threshold = data.get('threshold', 95)
     resolution_level = 20

@@ -1,35 +1,39 @@
-import uuid
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, Header
-from app.auth import require_hub_user
-from sqlalchemy.orm import Session
+import hashlib
+import os
+
+import httpx
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app.auth import require_hub_user
 from app.database import get_db
+from app.merkle import canonical_members, merkle_root
 from app.models.geo_id_model import (
-    ListArtifact, ListMemberEdge, ListParentEdge,
-    RegionArtifact, RegionCoverCell, RegionParentEdge,
-    GeoID, GeoIDAlias
+    GeoID,
+    GeoIDAlias,
+    ListArtifact,
+    ListMemberEdge,
+    ListParentEdge,
+    RegionArtifact,
+    RegionCoverCell,
+    RegionParentEdge,
 )
-import httpx
-import os
-from app.merkle import merkle_root, canonical_members
-import hashlib
 
 router = APIRouter(tags=["Trace Forward"])
 
 class RegisterListRequest(BaseModel):
-    members: List[str]
+    members: list[str]
 
 class RegisterListResponse(BaseModel):
     list_id: str
     message: str
 
 class RegisterRegionRequest(BaseModel):
-    members: Optional[List[str]] = None
-    wkt: Optional[str] = None
+    members: list[str] | None = None
+    wkt: str | None = None
 
 class RegisterRegionResponse(BaseModel):
     region_id: str
@@ -103,7 +107,7 @@ def register_region_artifact(
                 continue
             visited.add(member)
             
-            actual_list_id = member[2:] if member.startswith("L:") else member
+            actual_list_id = member.removeprefix("L:")
             
             is_list = db.execute(select(ListArtifact).where(ListArtifact.list_id == actual_list_id)).scalar_one_or_none()
             if is_list:
@@ -163,19 +167,21 @@ def register_region_artifact(
 
 class ListMembersResponse(BaseModel):
     list_id: str
-    members: List[str]
+    members: list[str]
 
 import hmac
-def _is_trusted_internal(token: Optional[str]) -> bool:
+
+
+def _is_trusted_internal(token: str | None) -> bool:
     expected = os.getenv("AR2_INTERNAL_SHARED_SECRET")
     return bool(expected) and bool(token) and hmac.compare_digest(token, expected)
 
 @router.get("/list-artifact/{list_id}", response_model=ListMembersResponse)
 def get_list_artifact(
     list_id: str,
-    x_grant_token: Optional[str] = Header(None),
-    x_authority_token: Optional[str] = Header(None),
-    x_pancake_internal: Optional[str] = Header(None),
+    x_grant_token: str | None = Header(None),
+    x_authority_token: str | None = Header(None),
+    x_pancake_internal: str | None = Header(None),
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
 ):
@@ -201,7 +207,7 @@ def get_list_artifact(
     return ListMembersResponse(list_id=list_id, members=canonical_members(all_members))
 
 class ListReverseResponse(BaseModel):
-    list_ids: List[str]
+    list_ids: list[str]
 
 @router.get("/list-artifact/reverse/{geoid}", response_model=ListReverseResponse)
 def get_list_artifact_reverse(
@@ -218,21 +224,22 @@ def get_list_artifact_reverse(
 
 class TraceForwardRequest(BaseModel):
     seed_geoid: str
-    scope: Optional[str] = None
+    scope: str | None = None
 
 from typing import Literal
 
+
 class TraceMatch(BaseModel):
     list_id: str
-    holder_account: Optional[str] = None
+    holder_account: str | None = None
     resolution: Literal["match", "contained", "no-match"] = "match"
 
 class TraceForwardResponse(BaseModel):
     seed_geoid: str
     tier: int
     match_count: int
-    list_ids: List[str]
-    matches: Optional[List[TraceMatch]] = None
+    list_ids: list[str]
+    matches: list[TraceMatch] | None = None
 
 def _resolve_holders(list_ids: set[str], authority_token: str, scope: str, seed_geoid: str) -> dict[str, str]:
     """Tier-3 only: ask Pancake who holds each matched artifact."""
@@ -267,8 +274,8 @@ def _equivalence_set(db: Session, seed: str) -> set[str]:
 def run_traceforward(
     payload: TraceForwardRequest,
     request: Request,
-    x_grant_token: Optional[str] = Header(None),
-    x_authority_token: Optional[str] = Header(None),
+    x_grant_token: str | None = Header(None),
+    x_authority_token: str | None = Header(None),
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
 ):

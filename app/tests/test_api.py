@@ -1,8 +1,9 @@
 import os
-import json
+
 import pytest
-from fastapi.testclient import TestClient
 from dotenv import load_dotenv
+from fastapi.testclient import TestClient
+
 load_dotenv()
 
 
@@ -15,14 +16,15 @@ os.environ["AR_TRUSTED_AUTHORITY_PUBKEY"] = os.path.join(TESTKIT_DIR, "authority
 def set_test_status_list_dir(monkeypatch):
     monkeypatch.setenv("TEST_STATUS_LIST_DIR", TESTKIT_DIR)
 
-from app.main import app
-from app.database import Base, engine, get_db, SessionLocal
-from app.models import GeoID
-from app.models.geo_id_model import GeoIDAlias
 from unittest.mock import patch
 
 # Override dependencies to decouple from external Hub auth
 from app.auth import require_hub_user
+from app.database import SessionLocal
+from app.main import app
+from app.models import GeoID
+from app.models.geo_id_model import GeoIDAlias
+
 app.dependency_overrides[require_hub_user] = lambda: {"sub": "test@demo.com"}
 
 client = TestClient(app)
@@ -234,8 +236,8 @@ def test_network_error_degrades_to_l0():
 
 def test_real_rs256_auth():
     print("\n\n[TEST] Starting test_real_rs256_auth")
-    from cryptography.hazmat.primitives.asymmetric import rsa
     import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
     
     private_key1 = rsa.generate_private_key(
         public_exponent=65537,

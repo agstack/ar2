@@ -6,17 +6,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-from fastapi import APIRouter, HTTPException, Depends, Header, status, Query, Request
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
-from typing import Optional
 
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
+from app.auth import get_current_user, verify_field_grant
 from app.database import get_db
 from app.models import GeoID
-from app.utils import Utils
-from app.schemas import FetchFieldResponse, OverlapRequest, FetchFieldsForPointRequest
 from app.s2_services import S2Service
-from app.auth import get_current_user, require_hub_user, verify_field_grant
+from app.schemas import FetchFieldResponse
+from app.utils import Utils
 
 router = APIRouter(prefix="", tags=["Fetch Field"])
 
@@ -101,9 +101,9 @@ async def translate_to_full(geo_id_short: str, db: Session = Depends(get_db)):
 @router.get("/fetch-field/{geo_id}", response_model=FetchFieldResponse, tags=["Field Fetch"])
 async def fetch_field(
     geo_id: str,
-    s2_index: Optional[str] = Query(None, description="Comma-separated S2 levels to fetch (e.g., '13,20')"),
+    s2_index: str | None = Query(None, description="Comma-separated S2 levels to fetch (e.g., '13,20')"),
     user: dict | None = Depends(get_current_user),
-    x_field_grant: Optional[str] = Header(None, alias="X-Field-Grant"),
+    x_field_grant: str | None = Header(None, alias="X-Field-Grant"),
     db: Session = Depends(get_db)
 ):
     try:
@@ -132,12 +132,12 @@ async def fetch_field(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Fetch Field Error: {str(e)}"
+            detail=f"Fetch Field Error: {e!s}"
         )
 
 
 @router.get("/fetch-field-wkt/{geo_id}", tags=["Field Fetch"])
-async def fetch_field_wkt(geo_id: str, user: dict | None = Depends(get_current_user), x_field_grant: Optional[str] = Header(None, alias="X-Field-Grant"), db: Session = Depends(get_db)):
+async def fetch_field_wkt(geo_id: str, user: dict | None = Depends(get_current_user), x_field_grant: str | None = Header(None, alias="X-Field-Grant"), db: Session = Depends(get_db)):
     try:
         record = db.query(GeoID).filter(
             or_(GeoID.geo_id == geo_id, GeoID.geo_id_short == geo_id)
@@ -168,11 +168,11 @@ async def fetch_field_wkt(geo_id: str, user: dict | None = Depends(get_current_u
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Fetch Field WKT Error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Fetch Field WKT Error: {e!s}")
 
 
 @router.get("/fetch-field-centroid/{geo_id}", tags=["Field Fetch"])
-async def fetch_field_centroid(geo_id: str, user: dict | None = Depends(get_current_user), x_field_grant: Optional[str] = Header(None, alias="X-Field-Grant"), db: Session = Depends(get_db)):
+async def fetch_field_centroid(geo_id: str, user: dict | None = Depends(get_current_user), x_field_grant: str | None = Header(None, alias="X-Field-Grant"), db: Session = Depends(get_db)):
     try:
         record = db.query(GeoID).filter(
             or_(GeoID.geo_id == geo_id, GeoID.geo_id_short == geo_id)
@@ -214,10 +214,10 @@ async def fetch_field_centroid(geo_id: str, user: dict | None = Depends(get_curr
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Fetch Field Centroid Error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Fetch Field Centroid Error: {e!s}")
 
 @router.get("/geoid/{geo_id}/eudr-export", tags=["Field Fetch"])
-async def eudr_export(geo_id: str, user: dict | None = Depends(get_current_user), x_field_grant: Optional[str] = Header(None, alias="X-Field-Grant"), db: Session = Depends(get_db)):
+async def eudr_export(geo_id: str, user: dict | None = Depends(get_current_user), x_field_grant: str | None = Header(None, alias="X-Field-Grant"), db: Session = Depends(get_db)):
         
     try:
         record = db.query(GeoID).filter(
@@ -254,5 +254,5 @@ async def eudr_export(geo_id: str, user: dict | None = Depends(get_current_user)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"EUDR Export Error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"EUDR Export Error: {e!s}")
 

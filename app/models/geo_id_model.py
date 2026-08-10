@@ -9,13 +9,25 @@
 import uuid
 from datetime import datetime, timezone
 
+
 def get_utc_now():
     return datetime.now(timezone.utc)
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, JSON, ForeignKey, Enum, Index
-from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID, JSONB , ARRAY
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+)
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+
 from app.database import Base
+
 
 class GeoID(Base):
     __tablename__ = 'geo_ids'
@@ -57,6 +69,7 @@ class ListArtifact(Base):
     created_at = Column(DateTime, default=get_utc_now)
 
 from sqlalchemy import UniqueConstraint
+
 
 class ListMemberEdge(Base):
     __tablename__ = 'listmember_edge'

@@ -7,13 +7,22 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import os
+
 from dotenv import load_dotenv
+
 load_dotenv()
 load_dotenv(os.path.join(os.path.dirname(__file__), "../.env"))
 
 from fastapi import FastAPI
-from app.database import engine, Base
-from app.routers import field_registration , fetch_field , point_registration , analytics_and_maintenance_apis, traceforward
+
+from app.database import Base, engine
+from app.routers import (
+    analytics_and_maintenance_apis,
+    fetch_field,
+    field_registration,
+    point_registration,
+    traceforward,
+)
 
 Base.metadata.create_all(bind=engine)
 

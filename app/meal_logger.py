@@ -1,7 +1,7 @@
-import json
-from typing import Optional
 import os
+
 import httpx
+
 
 def _append_to_meal_chain(packet: dict):
     pancake_url = os.getenv("PANCAKE_URL", "http://localhost:8100")
@@ -17,7 +17,7 @@ def _append_to_meal_chain(packet: dict):
         from fastapi import HTTPException
         raise HTTPException(status_code=503, detail="Audit logging failed") from e
 
-def log_traceforward(user_sub: str, credential_jti: str, seed_geoid: str, scope: Optional[str], match_count: int, list_ids: list[str]):
+def log_traceforward(user_sub: str, credential_jti: str, seed_geoid: str, scope: str | None, match_count: int, list_ids: list[str]):
     """
     Logs a traceforward.invoked MEAL packet.
     """

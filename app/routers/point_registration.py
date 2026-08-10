@@ -6,22 +6,30 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import asyncio
 import json
 import random
-from fastapi import APIRouter, HTTPException, Depends, Header, Query, status, UploadFile, File, Body
-from sqlalchemy.orm import Session
-from typing import Optional, Dict, Any
+import time
+from typing import Any
 
-from app.schemas import PointRegistrationRequest
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    UploadFile,
+)
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+
+from app.auth import require_hub_user
 from app.database import get_db
 from app.models import GeoID
-from app.utils import Utils, GeoDataUtils
 from app.s2_services import S2Service
-from app.auth import require_hub_user
-
-from fastapi.responses import StreamingResponse
-import asyncio
-import time
+from app.schemas import PointRegistrationRequest
+from app.utils import GeoDataUtils, Utils
 
 router = APIRouter(prefix="", tags=["Point Registration"])
 
@@ -29,7 +37,7 @@ router = APIRouter(prefix="", tags=["Point Registration"])
 @router.post("/register-point", tags=["Point Registration"])
 async def register_point(
     payload: PointRegistrationRequest,
-    automated_field: Optional[int] = Header(None, alias="AUTOMATED-FIELD"),
+    automated_field: int | None = Header(None, alias="AUTOMATED-FIELD"),
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
     ):
@@ -122,7 +130,7 @@ async def register_point(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Register Point Error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Register Point Error: {e!s}")
 
 
 # @router.post("/register-points-geojson", tags=["Point Registration"])
@@ -259,9 +267,9 @@ async def register_point(
 
 @router.post("/register-points-geojson", tags=["Point Registration"])
 async def register_points_geojson(
-    file: Optional[UploadFile] = File(None),
-    payload: Optional[Dict[str, Any]] = Body(None),
-    automated_field: Optional[int] = Header(None, alias="AUTOMATED-FIELD"),
+    file: UploadFile | None = File(None),
+    payload: dict[str, Any] | None = Body(None),
+    automated_field: int | None = Header(None, alias="AUTOMATED-FIELD"),
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
 ):
@@ -278,7 +286,7 @@ async def register_points_geojson(
         if data.get('type') != 'FeatureCollection' or 'features' not in data:
             raise HTTPException(status_code=400, detail="Invalid GeoJSON FeatureCollection format")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Request Error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Request Error: {e!s}")
 
     boundary_type = "automated" if automated_field else "manual"
     features = data['features']
