@@ -129,7 +129,7 @@ async def fetch_field(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Fetch Field Error: {e!s}"
@@ -167,7 +167,7 @@ async def fetch_field_wkt(geo_id: str, user: dict | None = Depends(get_current_u
         }
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Fetch Field WKT Error: {e!s}")
 
 
@@ -213,7 +213,7 @@ async def fetch_field_centroid(geo_id: str, user: dict | None = Depends(get_curr
             }
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Fetch Field Centroid Error: {e!s}")
 
 @router.get("/geoid/{geo_id}/eudr-export", tags=["Field Fetch"])
@@ -253,6 +253,6 @@ async def eudr_export(geo_id: str, user: dict | None = Depends(get_current_user)
         }
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"EUDR Export Error: {e!s}")
 

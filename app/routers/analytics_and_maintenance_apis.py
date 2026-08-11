@@ -28,7 +28,7 @@ async def fetch_registered_field_count(db: Session = Depends(get_db)):
             "message": "Total count fetched successfully.",
             "count": count,
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Fetch registered field count error! {e!s}")
 
 
@@ -40,7 +40,7 @@ async def fetch_field_count_by_month(db: Session = Depends(get_db)):
             "message": "Fetched Count By Month successfully.",
             "count": count,
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Fetch field counts by month error! {e!s}")
 
 
@@ -52,7 +52,7 @@ async def fetch_field_count_by_country(db: Session = Depends(get_db)):
             "message": "Fetched count by country successfully.",
             "count": count,
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Fetch field counts by country error! {e!s}")
 
 
@@ -65,7 +65,7 @@ async def get_percentage_overlap_two_fields(payload: OverlapRequest, db: Session
         return {"Percentage Overlap": f"{percentage_overlap} %"}
     except AttributeError as error:
         raise HTTPException(status_code=404, detail=str(error))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Get Percentage Overlap two Fields Error: {e!s}")
 
 
@@ -98,7 +98,7 @@ async def fetch_fields_for_a_point(
                 field["MaskingLevel"] = "L1"
 
         return {"Fetched fields": fetched_fields}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Fetch Fields for a Point Error: {e!s}")
 
 @router.post("/populate-country-in-geo-ids", tags=["Maintenance"])
@@ -125,7 +125,7 @@ async def populate_country_in_geo_ids(db: Session = Depends(get_db)):
                 
         db.commit()
         return {"message": f"Countries updated successfully for {len(rows)} records"}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 

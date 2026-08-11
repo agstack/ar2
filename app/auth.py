@@ -37,14 +37,14 @@ def get_jti(token: str) -> str:
         t = token.split("~")[0]
         unverified = jwt.decode(t, options={"verify_signature": False})
         return unverified.get("jti", "unknown")
-    except:
+    except jwt.PyJWTError:
         return "unknown"
 
 def verify_field_grant(grant_token: str, requested_geoid: str) -> bool:
     try:
         res = authorize_artifact(grant_token=grant_token, geoid=requested_geoid, raise_404_on_fail=True)
         return res.get("authorized", False)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
 
 def authorize_artifact(
@@ -72,7 +72,7 @@ def authorize_artifact(
                 local_status_list_path=test_dir,
             ):
                 return {"authorized": True, "used_authority": True, "authority_jti": get_jti(authority_token)}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             if not raise_404_on_fail:
                 raise HTTPException(status_code=401, detail=f"Authority credential invalid: {e}")
             
@@ -81,7 +81,7 @@ def authorize_artifact(
         try:
             if verify_sdjwt_grant(grant_token, pubkey, requested_geoid=geoid, requested_list_id=list_id, local_status_list_path=test_dir):
                 return {"authorized": True, "used_authority": False}
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
     if raise_404_on_fail:
         raise HTTPException(status_code=404, detail="Artifact not found")
@@ -103,7 +103,7 @@ def verify_token(token: str):
             algorithms=["RS256"]
         )
         return data
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 async def get_current_user(request: Request):

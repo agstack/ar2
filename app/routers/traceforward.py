@@ -233,6 +233,7 @@ class TraceMatch(BaseModel):
     list_id: str
     holder_account: str | None = None
     resolution: Literal["match", "contained", "no-match"] = "match"
+    holder_status: Literal["resolved", "unresolved"] | None = None
 
 class TraceForwardResponse(BaseModel):
     seed_geoid: str
@@ -254,7 +255,7 @@ def _resolve_holders(list_ids: set[str], authority_token: str, scope: str, seed_
                           }, timeout=10)
         resp.raise_for_status()
         return resp.json().get("holders", {})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"holder resolution failed: {e}")
 
 def _equivalence_set(db: Session, seed: str) -> set[str]:
@@ -270,7 +271,7 @@ def _equivalence_set(db: Session, seed: str) -> set[str]:
     ).scalars().all()
     return roots | set(aliases)
 
-@router.post("/traceforward", response_model=TraceForwardResponse)
+@router.post("/traceforward", response_model=TraceForwardResponse, response_model_exclude_none=True)
 def run_traceforward(
     payload: TraceForwardRequest,
     request: Request,
@@ -283,7 +284,7 @@ def run_traceforward(
     Tiered trace-forward with Gate A/B checks.
     """
     capabilities = user.get("capabilities", [])
-    if "trace-forward" not in capabilities:
+    if "trace-forward" not in capabilities and not x_grant_token:
         raise HTTPException(status_code=403, detail="Hub capabilities missing trace-forward")
 
     if x_authority_token and not payload.scope:
@@ -351,9 +352,9 @@ def run_traceforward(
     if tier == 3:
         log_traceforward(user.get("sub"), auth_result.get("authority_jti"), payload.seed_geoid, payload.scope, len(found), list(found))
         holders = _resolve_holders(found, x_authority_token, payload.scope, payload.seed_geoid)
-        matches = [TraceMatch(list_id=lid, holder_account=holders.get(lid, "unresolved"), resolution=list_resolutions[lid]) for lid in sorted(found)]
+        matches = [TraceMatch(list_id=lid, holder_account=holders.get(lid), holder_status="resolved" if lid in holders else "unresolved", resolution=list_resolutions[lid]) for lid in sorted(found)]
     else:
-        matches = [TraceMatch(list_id=lid, holder_account=None, resolution=list_resolutions[lid]) for lid in sorted(found)]
+        matches = [TraceMatch(list_id=lid, resolution=list_resolutions[lid]) for lid in sorted(found)]
 
     return TraceForwardResponse(
         seed_geoid=payload.seed_geoid,

@@ -35,10 +35,10 @@ def _split(sd_jwt: str) -> tuple[str, list[str]]:
 def verify_sdjwt_grant(
     sd_jwt: str,
     public_key_pem: bytes,
-    requested_geoid: str = None,
-    requested_list_id: str = None,
-    local_status_list_path: str = None,
-    now: int = None
+    requested_geoid: str | None = None,
+    requested_list_id: str | None = None,
+    local_status_list_path: str | None = None,
+    now: int | None = None
     ) -> bool:
 
     token, disclosures = _split(sd_jwt)
@@ -81,7 +81,7 @@ def verify_sdjwt_grant(
             
             try:
                 decoded_json = _b64url_decode(encoded)
-                salt, claim_name, value = json.loads(decoded_json)
+                _salt, claim_name, value = json.loads(decoded_json)
             except Exception as e:
                 raise VerificationError("invalid disclosure format") from e
                 
@@ -97,7 +97,7 @@ def verify_sdjwt_grant(
     _verify_status_list(claims, local_status_list_path)
     return True
 
-def _verify_status_list(claims: dict, local_status_list_path: str = None):
+def _verify_status_list(claims: dict, local_status_list_path: str | None = None):
     status_claim = claims.get("status", {}).get("status_list", {})
     uri = status_claim.get("uri")
     idx = status_claim.get("idx")
@@ -115,14 +115,14 @@ def _verify_status_list(claims: dict, local_status_list_path: str = None):
         try:
             with open(filepath, "rb") as f:
                 status_list_data = f.read()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             raise VerificationError(f"failed to load local status list: {e}")
     else:
         try:
             req = urllib.request.Request(uri, headers={'Accept': 'application/statuslist+jwt'})
             with urllib.request.urlopen(req, timeout=10) as response:
                 status_list_data = response.read()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             raise VerificationError(f"failed to fetch status list: {e}")
 
     try:
@@ -130,14 +130,14 @@ def _verify_status_list(claims: dict, local_status_list_path: str = None):
         try:
             sl_json = json.loads(status_list_data)
             bitstring_encoded = sl_json.get("encoded")
-        except:
+        except json.JSONDecodeError:
             pass
             
         if not bitstring_encoded:
             try:
                 decoded_sl = pyjwt.decode(status_list_data, options={"verify_signature": False})
                 bitstring_encoded = decoded_sl.get("vc", {}).get("credentialSubject", {}).get("status_list", {}).get("lst")
-            except:
+            except pyjwt.PyJWTError:
                 pass
                 
         if not bitstring_encoded:
@@ -145,7 +145,7 @@ def _verify_status_list(claims: dict, local_status_list_path: str = None):
 
         bitstring_compressed = _b64url_decode(bitstring_encoded)
         bitstring = zlib.decompress(bitstring_compressed)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise VerificationError(f"failed to decode/decompress status list: {e}")
 
     byte_idx = idx // 8
@@ -160,11 +160,11 @@ def _verify_status_list(claims: dict, local_status_list_path: str = None):
 def verify_authority_credential(
     sd_jwt: str,
     public_key_pem: bytes,
-    requested_scope: str = None,
-    local_status_list_path: str = None,
-    now: int = None
+    requested_scope: str | None = None,
+    local_status_list_path: str | None = None,
+    now: int | None = None
 ) -> bool:
-    token, disclosures = _split(sd_jwt)
+    token, _disclosures = _split(sd_jwt)
     now = now if now is not None else int(time.time())
 
     try:

@@ -44,8 +44,8 @@ class S2Service:
             longs, lats = longs.tolist(), lats.tolist()
             cell_ids = S2Service.get_bounding_box_cell_ids(lats, longs, resolution_level)
             return cell_ids
-        except Exception as e:
-            raise Exception(e)
+        except Exception as e:  # noqa: BLE001
+            raise ValueError(e)
 
 
     @staticmethod
@@ -58,16 +58,15 @@ class S2Service:
                 s2_token_list.append(s2_cell_id.to_token())
 
             return s2_token_list
-        except Exception as e:
-            raise Exception(e)
+        except Exception as e:  # noqa: BLE001
+            raise ValueError(e)
 
     @staticmethod
     def get_boundary_coverage(s2_cell_ids, polygon, max_resolution_col_name):
 
         s2_index__l19_list = []
         p_gdf = gpd.GeoDataFrame()
-        idx = 0
-        for s2_cell_id in s2_cell_ids:
+        for idx, s2_cell_id in enumerate(s2_cell_ids):
             s2_cell = s2.Cell(s2_cell_id)
             vertices = []
             for i in range(4):
@@ -79,7 +78,6 @@ class S2Service:
                 s2_index__l19_list.append(s2_cell_id.to_token())
                 p_gdf.loc[idx, max_resolution_col_name] = s2_cell_id.to_token()
                 p_gdf.loc[idx, 'geometry'] = geo
-            idx += 1
 
         p_gdf.reset_index(drop=True, inplace=True)
         return p_gdf

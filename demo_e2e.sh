@@ -181,7 +181,25 @@ OWNER_FETCH_AFTER=$(curl -s -X GET "$AR_HUB_URL/fetch-field-wkt/$GEOID" \
   -H "X-Field-Grant: $OWNER_CREDENTIAL")
 expect "Farmer Owner Credential Level (Intact)" "$(echo "$OWNER_FETCH_AFTER" | JSON "['MaskingLevel']")" "L1"
 
+echo "13. Trace-Forward (Refusal without Credentials)"
+TF_REF_RES=$(curl -s -w "\n%{http_code}" -X POST "$AR_HUB_URL/traceforward" \
+  -H "Authorization: Bearer $FARMER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"seed_geoid\": \"$GEOID\", \"scope\": \"eudr-due-diligence\"}")
+TF_REF_HTTP=$(echo "$TF_REF_RES" | tail -n1)
+expect "Trace-Forward properly blocked (403)" "$TF_REF_HTTP" "403"
 echo ""
+
+echo "14. Trace-Forward Tier 1 (Owner Grant)"
+TF_RES=$(curl -s -w "\n%{http_code}" -X POST "$AR_HUB_URL/traceforward" \
+  -H "Authorization: Bearer $FARMER_TOKEN" \
+  -H "X-Grant-Token: $OWNER_CREDENTIAL" \
+  -H "Content-Type: application/json" \
+  -d "{\"seed_geoid\": \"$GEOID\", \"scope\": \"eudr-due-diligence\"}")
+TF_HTTP=$(echo "$TF_RES" | tail -n1)
+expect "Tier 1 Trace-Forward Success Code" "$TF_HTTP" "200"
+echo ""
+
 echo "=========================================================="
 echo " ALL EXPECTATIONS PASSED. DEMO COMPLETE."
 echo "=========================================================="

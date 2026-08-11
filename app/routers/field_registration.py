@@ -10,6 +10,7 @@ import asyncio
 import json
 import random
 import time
+import uuid
 from typing import Any
 
 from fastapi import (
@@ -157,7 +158,7 @@ async def register_field_boundary(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Register Field Boundary Error: {e!s}")
 
 
@@ -360,11 +361,10 @@ async def register_field_boundaries_geojson(
 
         if data.get('type') != 'FeatureCollection' or 'features' not in data:
             raise HTTPException(status_code=400, detail="Invalid GeoJSON FeatureCollection format")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Request Error: {e!s}")
 
     threshold = data.get('threshold', 95)
-    resolution_level = 20
     boundary_type = "automated" if automated_field else "manual"
     features = data['features']
     total_features = len(features)
@@ -525,7 +525,7 @@ async def register_field_boundaries_geojson(
                     "geo_json": feature
                 })
 
-            except Exception as field_error:
+            except Exception as field_error:  # noqa: BLE001
                 db.rollback() 
                 results.append({
                     "status": "error",

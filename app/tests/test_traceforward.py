@@ -145,7 +145,7 @@ def test_region_normalization_determinism_and_wkt():
     
     r1 = client.post("/region-artifact", json={"members": [g1, g2]})
     assert r1.status_code == 200
-    id1 = r1.json()["region_id"]
+    r1.json()["region_id"]
     
     # WKT registration
     # POLYGON around the area
@@ -263,6 +263,11 @@ def test_gate_a_missing_capability_403():
 def test_gate_b_owner_path_passes_without_identities():
     _hub(["trace-forward"])
     SEED = create_test_geoid(["111"])
+    db = SessionLocal()
+    from app.models import GeoIDListEdge, ListArtifact
+    db.add(ListArtifact(list_id="dummy-list"))
+    db.add(GeoIDListEdge(geo_id=SEED, list_id="dummy-list"))
+    db.commit()
     r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
                     headers={"X-Grant-Token": valid_grant_for(SEED)})
     assert r.status_code == 200
@@ -296,7 +301,7 @@ def test_gate_b_authority_missing_scope_400():
 def test_gate_b_authority_global_scope():
     _hub(["trace-forward"])
     SEED = create_test_geoid(["111"])
-    with patch("app.routers.traceforward._resolve_holders") as mock_resolve, patch("app.meal_logger._append_to_meal_chain") as mock_audit:
+    with patch("app.routers.traceforward._resolve_holders") as mock_resolve, patch("app.meal_logger._append_to_meal_chain"):
         mock_resolve.return_value = {}
         r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "some-other-scope"},
                         headers={"X-Authority-Token": _read("global_authority")})
@@ -315,7 +320,7 @@ def test_gate_b_authority_untrusted_key_401():
 def test_gate_b_authority_owns_nothing_gets_identities():
     _hub(["trace-forward"])
     SEED = create_test_geoid(["111"])
-    with patch("app.routers.traceforward._resolve_holders") as mock_resolve, patch("app.meal_logger._append_to_meal_chain") as mock_audit:
+    with patch("app.routers.traceforward._resolve_holders") as mock_resolve, patch("app.meal_logger._append_to_meal_chain"):
         mock_resolve.return_value = {}
         r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
                         headers={"X-Authority-Token": _read("valid_authority")})
@@ -357,7 +362,7 @@ def test_authority_round_trip():
     r1 = client.post("/list-artifact", json={"members": [SEED]})
     retail_list_id = r1.json()["list_id"]
     auth = {"X-Authority-Token": _read("valid_authority")}
-    with patch("app.meal_logger._append_to_meal_chain") as mock_audit:
+    with patch("app.meal_logger._append_to_meal_chain"):
         back = client.get(f"/list-artifact/{retail_list_id}", headers=auth)
         assert back.status_code == 200
         geoids = [m for m in back.json()["members"] if not m.startswith(("L:", "R:"))]

@@ -129,7 +129,7 @@ async def register_point(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Register Point Error: {e!s}")
 
 
@@ -285,7 +285,7 @@ async def register_points_geojson(
 
         if data.get('type') != 'FeatureCollection' or 'features' not in data:
             raise HTTPException(status_code=400, detail="Invalid GeoJSON FeatureCollection format")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Request Error: {e!s}")
 
     boundary_type = "automated" if automated_field else "manual"
@@ -405,7 +405,7 @@ async def register_points_geojson(
                         "Geo JSON registered": s2_l10_data["geojson"]
                     })
 
-            except Exception as point_error:
+            except Exception as point_error:  # noqa: BLE001
                 db.rollback()
                 results.append({
                     "status": "error",

@@ -52,3 +52,27 @@ jobs:
         DATABASE_URL: "postgresql://postgres:password@localhost:5432/test_db"
       run: |
         PYTHONPATH=. pytest app/tests/
+
+    - name: Checkout Pancake
+      uses: actions/checkout@v4
+      with:
+        repository: agstack/pancake
+        ref: rajat
+        path: pancake
+        token: ${{ secrets.AGSTACK_PAT }}
+
+    - name: Start Servers and Run E2E
+      env:
+        DATABASE_URL: "postgresql://postgres:password@localhost:5432/test_db"
+        AR_TRUSTED_ISSUER_PUBKEY: ${{ github.workspace }}/pancake/services/pancake_services/grants/testkit/dev_keys/dev_issuer_public.pem
+        AR_TRUSTED_AUTHORITY_PUBKEY: ${{ github.workspace }}/app/tests/testkit/dev_keys/authority_issuer_public.pem
+      run: |
+        pip install -r pancake/services/requirements.txt
+        cd pancake/services
+        python -m pancake_services.grants.testkit.mint_test_credentials
+        DATABASE_URL="" uvicorn pancake_services.grants.app:app --port 8100 &
+        cd $GITHUB_WORKSPACE
+        uvicorn app.main:app --port 8000 &
+        sleep 5
+        ./demo_e2e.sh
+        ./scripts/e2e_traceforward.sh

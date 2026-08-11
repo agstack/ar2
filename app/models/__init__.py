@@ -7,10 +7,10 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 # Import the shared Base so Alembic can access it
-from app.database import Base
+from app.database import Base as Base
 
 # Import all individual models here
-from .geo_id_model import GeoID
+from .geo_id_model import GeoID as GeoID
 
 # When you add new tables later, just add them to this list:
 # from .some_other_model import SomeOtherModel

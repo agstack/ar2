@@ -63,7 +63,7 @@ class Utils:
             if not matches.empty:
                 return matches.reset_index(drop=True).CNTRY_NAME.iloc[0]
             return ''
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"Country detection error: {e}")
             return ''
 
@@ -105,7 +105,7 @@ class Utils:
     def records_s2_cell_tokens(s2_cell_tokens_dict: dict) -> list:
 
         all_tokens = []
-        for res_level, s2_cell_tokens in s2_cell_tokens_dict.items():
+        for s2_cell_tokens in s2_cell_tokens_dict.values():
             all_tokens.extend(s2_cell_tokens)
         
         return list(set(all_tokens))
@@ -114,7 +114,7 @@ class Utils:
     def register_field_boundary(
         db: Session, geo_id: str, geo_id_short: str, content_hash: str, 
         indices: dict, records_list: list, field_wkt: str, country: str, 
-        boundary_type: str, field_name: str = None, area_ha_approx: float = None, commit: bool = True
+        boundary_type: str, field_name: str | None = None, area_ha_approx: float | None = None, commit: bool = True
     ):
 
         try:
@@ -138,10 +138,10 @@ class Utils:
             if commit:
                 db.commit()
             return geo_data
-        except Exception as e:
+        except Exception:
             if commit:
                 db.rollback()
-            raise e
+            raise
 
     @staticmethod
     def fetch_geo_ids_for_cell_tokens(db: Session, s2_cell_tokens: list, domain: str = "") -> list:
@@ -259,7 +259,7 @@ class Utils:
             from shapely.geometry import shape
             geometry = shape(geojson_feature['geometry'])
             return geometry.wkt
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             raise ValueError(f"Failed to convert GeoJSON to WKT: {e!s}")
 
     @staticmethod
@@ -296,7 +296,7 @@ class Utils:
     @staticmethod
     def fetch_fields_for_a_point_two_way(
         db: Session, s2_cell_token_13: str, s2_cell_token_20: str, 
-        domain: str = None, s2_index: str = None, boundary_type: str = None
+        domain: str | None = None, s2_index: str | None = None, boundary_type: str | None = None
     ) -> list:
 
         query = db.query(GeoID).filter(GeoID.s2_cells.contains([s2_cell_token_13]))
@@ -339,7 +339,7 @@ class Utils:
             ).group_by('month').order_by('month').all()
             
             return [{"month": r[0], "count": r[1]} for r in results]
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"Analytics Error: Ensure your GeoID model has a 'created_at' column. Details: {e}")
             return []
 

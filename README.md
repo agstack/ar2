@@ -77,9 +77,12 @@ To run the automated test suite (which overrides the JWKS hub auth for isolation
 python -m pytest app/tests/test_api.py -v
 ```
 
-## Automated End-to-End Demo
+## Automated End-to-End Demos
 
-You can run the full end-to-end credential issuance and verification flow using the included bash script. The script covers the full lifecycle (registration, issuance, retrieving, verification, and revocation) and requires both the Hub and Pancake servers to be running locally.
-```bash
-./demo_e2e.sh
-```
+There are two separate end-to-end demo scripts, each covering a different capability. Both require the Hub and Pancake servers to be running locally.
+
+1. **Grant Lifecycle (`./demo_e2e.sh`)**
+   Covers the full lifecycle of a standard field grant (registration, issuance, retrieving L1 geometry, verification, and revocation).
+
+2. **Trace-forward (`./scripts/e2e_traceforward.sh`)**
+   Covers the trace-forward recursive graph capability. It registers fields, builds a supply chain list structure, issues an authority credential, and then performs trace-forward queries to demonstrate Tier 1 vs Tier 3 identity disclosure rules, including negative assertions for missing or revoked authority.

@@ -154,11 +154,16 @@ The traversal returns **both** terminals — the Taco Bell foodservice unit *and
 
 The same traversal produces different responses depending on who asks and what they are authorized to see. The `TraceMatch` response model categorizes each result as either a direct `match` (the seed is directly in the list) or `contained` (the list structurally contains the seed via a parent relationship or region inclusion).
 
-These resolutions map across four identity tiers:
+These resolutions map across four identity tiers. The API currently implements Tier 1 and Tier 3. Tier 2 and Tier 4 are paper designs for future implementation.
+
+### Implemented Tiers
 
 - **Tier 1 (Structural)** — A caller past both gates gets PII-free identifiers and counts. No names. The response returns `match` and `contained` resolutions, but no holder identities. An owner can reach this tier for its own field to see the blast radius' shape, but not who its customers' customers are.
-- **Tier 2 (Self-check)** — The accredited authority publishes the incident; any participant can privately ask *"am I affected?"* about **their own** holdings. The system returns `match` or `contained` for their own artifacts via a Merkle inclusion proof, without requiring an authority credential. Unrelated artifacts return `no-match`.
 - **Tier 3 (Identity Enumeration)** — Only a caller presenting a valid, in-scope **authority credential** gets the holder identities needed to actually place recall calls. The response returns `match` and `contained` resolutions along with the resolved holder account names. Every such call writes a `traceforward.invoked` MEAL audit packet.
+
+### Designed Tiers (Future Work)
+
+- **Tier 2 (Self-check)** — The accredited authority publishes the incident; any participant can privately ask *"am I affected?"* about **their own** holdings. The system returns `match` or `contained` for their own artifacts via a Merkle inclusion proof, without requiring an authority credential. Unrelated artifacts return `no-match`.
 - **Tier 4 (Public)** — Fully anonymized or aggregated public reporting. Returns `no-match` for specific artifact queries, preventing structural graph or identity exposure.
 
 The invariant across all tiers: **ownership lets you raise a recall and see its shape; only accredited authority resolves a hash into a company's name; and the distinction between a direct `match` and a structural `contained` result is preserved.**
