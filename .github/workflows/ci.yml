@@ -144,6 +144,7 @@ jobs:
 
         # Start Pancake
         cd pancake/services
+        export HUB_URL=""
         export HUB_JWKS_URL="http://127.0.0.1:8000/.well-known/jwks.json"
         export AR2_NODE_URL="http://127.0.0.1:8001"
         export AR2_INTERNAL_SHARED_SECRET="supersecret"
