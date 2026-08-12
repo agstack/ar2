@@ -1,26 +1,31 @@
 import os
-import json
+
 import pytest
-from fastapi.testclient import TestClient
 from dotenv import load_dotenv
+from fastapi.testclient import TestClient
+
 load_dotenv()
 
 
 # Mock environment variables BEFORE importing app components
-# Allow overriding TESTKIT_DIR, defaulting to a relative path assuming pancake is checked out next to ar2
-DEFAULT_TESTKIT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../pancake/services/pancake_services/grants/testkit/dev_keys"))
-TESTKIT_DIR = os.getenv("TESTKIT_DIR", DEFAULT_TESTKIT_DIR)
+TESTKIT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "testkit/dev_keys"))
 os.environ["AR_TRUSTED_ISSUER_PUBKEY"] = os.path.join(TESTKIT_DIR, "dev_issuer_public.pem")
-os.environ["TEST_STATUS_LIST_DIR"] = TESTKIT_DIR
+os.environ["AR_TRUSTED_AUTHORITY_PUBKEY"] = os.path.join(TESTKIT_DIR, "authority_issuer_public.pem")
 
-from app.main import app
-from app.database import Base, engine, get_db, SessionLocal
-from app.models import GeoID
+@pytest.fixture(autouse=True)
+def set_test_status_list_dir(monkeypatch):
+    monkeypatch.setenv("TEST_STATUS_LIST_DIR", TESTKIT_DIR)
+
 from unittest.mock import patch
 
 # Override dependencies to decouple from external Hub auth
-from app.auth import require_l1
-app.dependency_overrides[require_l1] = lambda: {"sub": "test@demo.com"}
+from app.auth import require_hub_user
+from app.database import SessionLocal
+from app.main import app
+from app.models import GeoID
+from app.models.geo_id_model import GeoIDAlias
+
+app.dependency_overrides[require_hub_user] = lambda: {"sub": "test@demo.com"}
 
 client = TestClient(app)
 
@@ -37,6 +42,20 @@ def mock_auth():
         mock_verify.side_effect = side_effect
         yield mock_verify
 
+def extract_geo_id(res):
+    if res.status_code == 200:
+        return res.json().get("Geo Id")
+    
+    data = res.json()
+    geo_id = data.get("Geo Id")
+    if not geo_id and isinstance(data.get("detail"), dict):
+        detail = data.get("detail")
+        geo_id = detail.get("Geo Id") or detail.get("matched geo ids", [None])[0]
+    
+    if not geo_id:
+        geo_id = "test-geo-id"
+    return geo_id
+
 def test_register_and_fetch_field(mock_auth):
     print("\n\n[TEST] Starting test_register_and_fetch_field")
     print("  -> Step 1: Attempting to register a Field Boundary")
@@ -46,18 +65,7 @@ def test_register_and_fetch_field(mock_auth):
     )
     print(f"  <- Response Code: {res.status_code}")
     assert res.status_code in [200, 400]
-    data = res.json()
-    geo_id = data.get("Geo Id") or data.get("detail", {}).get("Geo Id")
-    if not geo_id:
-        geo_id = data.get("matched geo ids", [None])[0]
-        if not geo_id:
-            geo_id = "test-geo-id"
-    
-    if res.status_code == 400:
-        if "matched geo ids" in res.json().get("detail", {}):
-            geo_id = res.json()["detail"]["matched geo ids"][0]
-        elif "Geo Id" in res.json().get("detail", {}):
-            geo_id = res.json()["detail"]["Geo Id"]
+    geo_id = extract_geo_id(res)
 
     print(f"  -> Extracted Geo ID for subsequent tests: {geo_id}")
 
@@ -93,10 +101,7 @@ def test_fetch_field_wkt(mock_auth):
         "/register-field-boundary",
         json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
     )
-    if res.status_code == 200:
-        geo_id = res.json()["Geo Id"]
-    else:
-        geo_id = res.json()["detail"].get("Geo Id") or res.json()["detail"].get("matched geo ids")[0]
+    geo_id = extract_geo_id(res)
 
     print("  -> Fetching WKT anonymously (should be None)")
     res_l0 = client.get(f"/fetch-field-wkt/{geo_id}")
@@ -116,10 +121,7 @@ def test_eudr_export(mock_auth):
         "/register-field-boundary",
         json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
     )
-    if res.status_code == 200:
-        geo_id = res.json()["Geo Id"]
-    else:
-        geo_id = res.json()["detail"].get("Geo Id") or res.json()["detail"].get("matched geo ids")[0]
+    geo_id = extract_geo_id(res)
 
     print("  -> Testing EUDR Export anonymously (should fail with 401)")
     res_l0 = client.get(f"/geoid/{geo_id}/eudr-export")
@@ -142,10 +144,7 @@ def test_fetch_field_centroid(mock_auth):
         "/register-field-boundary",
         json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
     )
-    if res.status_code == 200:
-        geo_id = res.json()["Geo Id"]
-    else:
-        geo_id = res.json()["detail"].get("Geo Id") or res.json()["detail"].get("matched geo ids")[0]
+    geo_id = extract_geo_id(res)
 
     print("  -> Fetching centroid anonymously (should return L0 masked centroid)")
     res_l0 = client.get(f"/fetch-field-centroid/{geo_id}")
@@ -228,10 +227,7 @@ def test_network_error_degrades_to_l0():
             "/register-field-boundary",
             json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
         )
-        data = res.json()
-        geo_id = data.get("Geo Id") or data.get("detail", {}).get("Geo Id")
-        if not geo_id:
-            geo_id = data.get("detail", {}).get("matched geo ids", [None])[0]
+        geo_id = extract_geo_id(res)
         
         res_fetch = client.get(f"/resolve/{geo_id}", headers={"Authorization": "Bearer some-token"})
         assert res_fetch.status_code == 200
@@ -240,8 +236,8 @@ def test_network_error_degrades_to_l0():
 
 def test_real_rs256_auth():
     print("\n\n[TEST] Starting test_real_rs256_auth")
-    from cryptography.hazmat.primitives.asymmetric import rsa
     import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
     
     private_key1 = rsa.generate_private_key(
         public_exponent=65537,
@@ -271,10 +267,7 @@ def test_real_rs256_auth():
             "/register-field-boundary",
             json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False}
         )
-        data = res.json()
-        geo_id = data.get("Geo Id") or data.get("detail", {}).get("Geo Id")
-        if not geo_id:
-            geo_id = data.get("detail", {}).get("matched geo ids", [None])[0]
+        geo_id = extract_geo_id(res)
             
         res1 = client.get(f"/resolve/{geo_id}", headers={"Authorization": f"Bearer {token1}"})
         assert res1.status_code == 200
@@ -380,3 +373,59 @@ def test_valid_grant_fetch_centroid(setup_database):
     res = client.get(f"/fetch-field-centroid/{geoid}", headers={"X-Field-Grant": token})
     assert res.status_code == 200
     assert res.json()["MaskingLevel"] == "L1"
+
+# --- Identity Resolution Tests ---
+
+TEST_FARM_WKT = "POLYGON ((76.6001 31.1001, 76.6001 31.1002, 76.6002 31.1002, 76.6002 31.1001, 76.6001 31.1001))"
+TEST_SUBPLOT_WKT = "POLYGON ((76.60012 31.10012, 76.60012 31.10018, 76.60018 31.10018, 76.60018 31.10012, 76.60012 31.10012))"
+TEST_NEAR_DUPE_WKT = "POLYGON ((76.6001 31.1001, 76.6001 31.1002, 76.6002 31.1002, 76.6002 31.100101, 76.6001 31.1001))"
+
+def test_identity_resolution_same_as(mock_auth):
+    # 1. Register the original field
+    res1 = client.post(
+        "/register-field-boundary",
+        json={"wkt": TEST_FARM_WKT, "threshold": 95, "return_s2_indices": False, "submitter": "test1"}
+    )
+    assert res1.status_code == 200
+    original_geo_id = res1.json()["Geo Id"]
+
+    # 2. Register a near-duplicate field
+    res2 = client.post(
+        "/register-field-boundary",
+        json={"wkt": TEST_NEAR_DUPE_WKT, "threshold": 95, "return_s2_indices": False, "submitter": "test2"}
+    )
+    assert res2.status_code == 200
+    assert res2.json()["message"] == "Resolved to existing field"
+    assert res2.json()["Geo Id"] == original_geo_id
+
+    # 3. Verify Alias record
+    db = SessionLocal()
+    alias = db.query(GeoIDAlias).filter(GeoIDAlias.canonical_geo_id == original_geo_id, GeoIDAlias.relation == "same_as").first()
+    assert alias is not None
+    assert alias.submitter == "test2"
+    db.close()
+
+def test_identity_resolution_nested(mock_auth):
+    # 1. Register a large field
+    res1 = client.post(
+        "/register-field-boundary",
+        json={"wkt": TEST_FARM_WKT, "threshold": 95, "return_s2_indices": False, "submitter": "parent_farmer"}
+    )
+    assert res1.status_code == 200
+    parent_geo_id = res1.json()["Geo Id"]
+
+    # 2. Register a nested subplot
+    res2 = client.post(
+        "/register-field-boundary",
+        json={"wkt": TEST_SUBPLOT_WKT, "threshold": 95, "return_s2_indices": False, "submitter": "child_farmer"}
+    )
+    assert res2.status_code == 200
+    
+    child_geo_id = res2.json()["Geo Id"]
+    assert child_geo_id != parent_geo_id
+
+    # 3. Verify Alias record (child_of link)
+    db = SessionLocal()
+    alias = db.query(GeoIDAlias).filter(GeoIDAlias.canonical_geo_id == parent_geo_id, GeoIDAlias.relation == "child_of").first()
+    assert alias is not None
+    db.close()

@@ -6,9 +6,23 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), "../.env"))
+
 from fastapi import FastAPI
-from app.database import engine, Base
-from app.routers import field_registration , fetch_field , point_registration , analytics_and_maintenance_apis
+
+from app.database import Base, engine
+from app.routers import (
+    analytics_and_maintenance_apis,
+    fetch_field,
+    field_registration,
+    point_registration,
+    traceforward,
+)
 
 Base.metadata.create_all(bind=engine)
 
@@ -23,6 +37,7 @@ app.include_router(field_registration.router)
 app.include_router(fetch_field.router)
 app.include_router(point_registration.router)
 app.include_router(analytics_and_maintenance_apis.router)
+app.include_router(traceforward.router)
 
 
 
