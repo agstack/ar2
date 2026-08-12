@@ -135,13 +135,16 @@ jobs:
         cd ar2
         export DATABASE_URL="postgresql://postgres:password@localhost:5432/ar2_test"
         export HUB_URL="http://127.0.0.1:8000"
+        export JWKS_URL="http://127.0.0.1:8000/.well-known/jwks.json"
+        export AR_TRUSTED_AUTHORITY_PUBKEY="$PWD/app/tests/testkit/dev_keys/authority_issuer_public.pem"
+        export AR_TRUSTED_ISSUER_PUBKEY="$PWD/app/tests/testkit/dev_keys/dev_issuer_public.pem"
         uvicorn app.main:app --port 8001 > node.log 2>&1 &
         cd ..
 
         # Start Pancake
         cd pancake/services
         python3 -m pancake_services.grants.testkit.mint_test_credentials
-        export HUB_JWKS_URL="http://127.0.0.1:8000/auth/signing-key"
+        export HUB_JWKS_URL="http://127.0.0.1:8000/.well-known/jwks.json"
         export PANCAKE_ENV="test"
         export PANCAKE_ISSUER_KEY=$(cat pancake_services/grants/testkit/dev_keys/dev_issuer_private.pem)
         uvicorn --factory pancake_services.grants.app:create_app --port 8100 > pancake.log 2>&1 &
