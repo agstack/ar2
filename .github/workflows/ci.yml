@@ -54,3 +54,123 @@ jobs:
         PYTHONPATH=. pytest app/tests/
 
 
+
+  e2e-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout AR2
+      uses: actions/checkout@v4
+      with:
+        path: ar2
+        
+    - name: Checkout Pancake
+      uses: actions/checkout@v4
+      with:
+        repository: agstack/pancake
+        ref: main
+        path: pancake
+
+    - name: Checkout Hub
+      uses: actions/checkout@v4
+      with:
+        repository: agstack/ar2-hub
+        ref: main
+        path: hub
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Provision Databases
+      run: |
+        PGPASSWORD=password psql -h localhost -U postgres -c "CREATE DATABASE ar2_test;"
+        PGPASSWORD=password psql -h localhost -U postgres -c "CREATE DATABASE hub_test;"
+
+    - name: Install AR2 Dependencies
+      run: |
+        cd ar2
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Install Hub Dependencies
+      run: |
+        cd hub
+        pip install -r requirements.txt
+
+    - name: Install Pancake Dependencies
+      run: |
+        cd pancake/services
+        pip install -r requirements.txt
+
+    - name: Start Services
+      run: |
+        # Start Hub
+        cd hub
+        export DATABASE_URL="postgresql://postgres:password@localhost:5432/hub_test"
+        export REGISTRY_SERVERS='{"USA":"http://127.0.0.1:8001","India":"http://127.0.0.1:8001","Common":"http://127.0.0.1:8001"}'
+        export SERVER_BASE_URL="http://127.0.0.1:8000"
+        uvicorn hub_main:app --port 8000 > hub.log 2>&1 &
+        cd ..
+
+        # Start AR2 Node
+        cd ar2
+        export DATABASE_URL="postgresql://postgres:password@localhost:5432/ar2_test"
+        export HUB_URL="http://127.0.0.1:8000"
+        uvicorn app.main:app --port 8001 > node.log 2>&1 &
+        cd ..
+
+        # Start Pancake
+        cd pancake/services
+        export HUB_JWKS_URL="http://127.0.0.1:8000/auth/signing-key"
+        export PANCAKE_ENV="test"
+        uvicorn --factory pancake_services.grants.app:create_app --port 8100 > pancake.log 2>&1 &
+        cd ../..
+
+    - name: Poll Health and Dump Logs on Failure
+      run: |
+        TIMEOUT=30
+        
+        check_health() {
+          local name=$1
+          local url=$2
+          local log_file=$3
+          
+          local t=$TIMEOUT
+          echo "Waiting for $name..."
+          while ! curl -s $url > /dev/null; do
+            sleep 1
+            t=$((t-1))
+            if [ $t -eq 0 ]; then
+              echo "$name failed to start!"
+              echo "--- $name Log ---"
+              cat $log_file
+              exit 1
+            fi
+          done
+          echo "$name is up!"
+        }
+        
+        check_health "Hub" "http://127.0.0.1:8000/docs" "hub/hub.log"
+        check_health "Node" "http://127.0.0.1:8001/docs" "ar2/node.log"
+        check_health "Pancake" "http://127.0.0.1:8100/docs" "pancake/services/pancake.log"
+
+    - name: Run E2E Trace-Forward Test
+      run: |
+        cd ar2
+        bash scripts/e2e_traceforward.sh
