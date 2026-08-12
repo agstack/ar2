@@ -150,6 +150,7 @@ jobs:
         export AR2_INTERNAL_SHARED_SECRET="supersecret"
         export PANCAKE_ENV="test"
         export PANCAKE_ISSUER_KEY=$(cat ../../ar2/app/tests/testkit/dev_keys/dev_issuer_private.pem)
+        export PANCAKE_TRUSTED_AUTHORITY_PUBKEY="../../ar2/app/tests/testkit/dev_keys/authority_issuer_public.pem"
         uvicorn --factory pancake_services.grants.app:create_app --port 8100 > pancake.log 2>&1 &
         cd ../..
 
