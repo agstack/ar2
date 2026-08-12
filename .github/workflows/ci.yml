@@ -178,4 +178,12 @@ jobs:
     - name: Run E2E Trace-Forward Test
       run: |
         cd ar2
-        bash scripts/e2e_traceforward.sh
+        if ! bash scripts/e2e_traceforward.sh; then
+          echo "=== HUB LOGS ==="
+          cat ../hub/hub.log
+          echo "=== NODE LOGS ==="
+          cat node.log
+          echo "=== PANCAKE LOGS ==="
+          cat ../pancake/services/pancake.log
+          exit 1
+        fi
