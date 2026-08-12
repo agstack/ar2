@@ -84,6 +84,7 @@ jobs:
         repository: agstack/pancake
         ref: main
         path: pancake
+        token: ${{ secrets.AGSTACK_PAT }}
 
     - name: Checkout Hub
       uses: actions/checkout@v4
@@ -91,6 +92,7 @@ jobs:
         repository: agstack/ar2-hub
         ref: main
         path: hub
+        token: ${{ secrets.AGSTACK_PAT }}
 
     - name: Set up Python
       uses: actions/setup-python@v5
