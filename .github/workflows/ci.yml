@@ -90,7 +90,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         repository: agstack/ar2-hub
-        ref: main
+        ref: c2de6428741daaf379b3df3d567781b21237e2db
         path: hub
         token: ${{ secrets.AGSTACK_PAT }}
 
