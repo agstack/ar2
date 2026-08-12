@@ -127,6 +127,7 @@ jobs:
         export DATABASE_URL="postgresql://postgres:password@localhost:5432/hub_test"
         export REGISTRY_SERVERS='{"USA":"http://127.0.0.1:8001","India":"http://127.0.0.1:8001","Common":"http://127.0.0.1:8001"}'
         export SERVER_BASE_URL="http://127.0.0.1:8000"
+        export WORLD_SHP_FILE="./shapefiles/99bfd9e7-bb42-4728-87b5-07f8c8ac631c2020328-1-1vef4ev.lu5nk.shp"
         uvicorn hub_main:app --port 8000 > hub.log 2>&1 &
         cd ..
 
