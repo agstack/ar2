@@ -143,7 +143,7 @@ jobs:
         python3 -m pancake_services.grants.testkit.mint_test_credentials
         export HUB_JWKS_URL="http://127.0.0.1:8000/auth/signing-key"
         export PANCAKE_ENV="test"
-        export PANCAKE_ISSUER_KEY=$(cat dev_keys/dev_issuer_private.pem)
+        export PANCAKE_ISSUER_KEY=$(cat pancake_services/grants/testkit/dev_keys/dev_issuer_private.pem)
         uvicorn --factory pancake_services.grants.app:create_app --port 8100 > pancake.log 2>&1 &
         cd ../..
 
