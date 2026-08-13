@@ -1,6 +1,8 @@
 import json
 import os
+
 import pytest
+
 from app.utils import Utils
 
 VECTOR_FILE = os.path.join(os.path.dirname(__file__), "testkit", "geoid_v2_vectors.json")

@@ -95,7 +95,7 @@ class Utils:
 
     @staticmethod
     def generate_geo_id_v2(wkt_string: str) -> str:
-        tokens, hash_val = Utils.generate_geo_id_v2_with_tokens(wkt_string)
+        _tokens, hash_val = Utils.generate_geo_id_v2_with_tokens(wkt_string)
         return hash_val
 
     @staticmethod

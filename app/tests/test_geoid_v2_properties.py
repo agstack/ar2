@@ -1,6 +1,5 @@
-import pytest
 from app.utils import Utils
-from shapely.wkt import loads
+
 
 def test_determinism():
     wkt = "POLYGON((0 0, 0 0.001, 0.001 0.001, 0.001 0, 0 0))"
