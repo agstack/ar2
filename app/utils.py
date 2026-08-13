@@ -94,6 +94,90 @@ class Utils:
         return m.hexdigest()
 
     @staticmethod
+    def generate_geo_id_v2(wkt_string: str) -> str:
+        tokens, hash_val = Utils.generate_geo_id_v2_with_tokens(wkt_string)
+        return hash_val
+
+    @staticmethod
+    def generate_geo_id_v2_with_tokens(wkt_string: str):
+        import s2geometry as s2g
+        from shapely import ops
+        from shapely.validation import make_valid
+        
+        # 1. Canonicalize geometry
+        geom = load_wkt(wkt_string)
+        geom = make_valid(geom)
+        
+        # force_2d (strip Z/M) and round to 6 decimal places
+        geom = ops.transform(lambda x, y, *args: (round(x, 6), round(y, 6)), geom)
+        
+        # normalize
+        # Shapely's normalize() will order coordinates canonically
+        from shapely.geometry.polygon import orient
+        
+        # Handle MultiPolygons or GeometryCollections if they result from make_valid
+        # For simplicity in this primitive, we assume it's a Polygon. 
+        # (Sumer's note: just assume simple polygons for the core primitive, we'll deal with multi later or loop)
+        if geom.geom_type == 'Polygon':
+            # Orient CCW for S2
+            geom = orient(geom, sign=1.0)
+            coords = list(geom.exterior.coords)
+        elif geom.geom_type == 'MultiPolygon':
+            # take the first polygon or handle properly
+            geom = orient(geom.geoms[0], sign=1.0)
+            coords = list(geom.exterior.coords)
+        elif geom.geom_type == 'GeometryCollection':
+            # Find the first polygon in the collection
+            poly = None
+            for g in geom.geoms:
+                if g.geom_type in ['Polygon', 'MultiPolygon']:
+                    poly = g
+                    break
+            if not poly:
+                raise ValueError("No polygon found in geometry collection")
+            if poly.geom_type == 'MultiPolygon':
+                poly = poly.geoms[0]
+            geom = orient(poly, sign=1.0)
+            coords = list(geom.exterior.coords)
+        else:
+            raise ValueError(f"Unsupported geometry type: {geom.geom_type}")
+            
+        # 2. Cover actual polygon down to level 20
+        points = [s2g.S2LatLng.FromDegrees(c[1], c[0]).ToPoint() for c in coords[:-1]]
+        loop = s2g.S2Loop(points)
+        loop.Normalize()
+        
+        s2poly = s2g.S2Polygon()
+        s2poly.InitNested([loop])
+        
+        coverer = s2g.S2RegionCoverer()
+        coverer.set_min_level(1)
+        coverer.set_max_level(20)
+        # Unbounded cells
+        coverer.set_max_cells(1000000)
+        
+        covering = coverer.GetCovering(s2poly) # Returns S2CellUnion
+        
+        # 3. Normalize cell union
+        # In python s2geometry, GetCovering returns a vector of S2CellId. 
+        # We need an S2CellUnion to normalize.
+        cell_union = s2g.S2CellUnion()
+        # Init takes a list of uint64s in Python
+        cell_union.Init([cell_id.id() for cell_id in covering])
+        # s2g.S2CellUnion().Init automatically normalizes the list of cells (sorts and compacts).
+        
+        # 4. Sort tokens
+        # Init sorts them, but we extract tokens and sort them as strings to be strictly deterministic across langs
+        tokens = [cell_id.ToToken() for cell_id in cell_union.cell_ids()]
+        tokens.sort()
+        
+        # 5. SHA-256
+        m = hashlib.sha256()
+        for t in tokens:
+            m.update(t.encode('utf-8'))
+        return tokens, m.hexdigest()
+
+    @staticmethod
     def lookup_geo_ids(db: Session, geo_id_to_lookup: str):
 
         record = db.query(GeoID).filter(GeoID.geo_id == geo_id_to_lookup).first()
