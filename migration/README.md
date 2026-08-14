@@ -212,13 +212,13 @@ idempotency, resume after interruption, dry run writing nothing, phase ordering,
 hub constraint rejection, orphaned joins, per-user field-set equality, shared
 ownership after merge, threshold sensitivity, and ListID correctness.
 
-`tests/test_sample.py` (13) — cluster detection from the L13 key alone,
+`tests/test_sample.py` (14) — cluster detection from the L13 key alone,
 separation of multi-owner from same-owner clusters, presence of every hazard
 stratum, survival of hazards under a budget far smaller than the source, refusal
 to backfill after a cut, orphan reporting, profile follow-through, determinism,
 and the collision count.
 
-`tests/test_db_repo.py` (21) — round-tripping through the database, each unique
+`tests/test_db_repo.py` (20) — round-tripping through the database, each unique
 and not-null constraint by name, the blocking index, alias idempotency and refusal
 to remap, parent edges, the Pancake mirror, migrated accounts being inactive with
 no usable password, field-list ownership and idempotency, multi-owner detection
