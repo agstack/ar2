@@ -1,8 +1,8 @@
 {
   "$stomata_artifact": "baseline",
-  "captured_at": "2026-08-14T17:44:42+00:00",
-  "commit": "f80e3d0245951a9e6cca130f292bafd65e5dd338",
-  "dirty_when_captured": true,
+  "captured_at": "2026-08-14T18:11:16+00:00",
+  "commit": "4ecdd0ffbb52e181b6a91ef341a5d7588f970944",
+  "dirty_when_captured": false,
   "suites": {
     "ar2": {
       "passed": 119,
@@ -129,8 +129,8 @@
       ]
     },
     "migration": {
-      "passed": 74,
-      "total": 78,
+      "passed": 81,
+      "total": 85,
       "test_ids": [
         "migration/tests/test_db_repo.py::test_alias_is_persisted_and_resolves",
         "migration/tests/test_db_repo.py::test_alias_re_upsert_is_idempotent_but_remap_is_refused",
@@ -152,6 +152,13 @@
         "migration/tests/test_db_repo.py::test_migrated_accounts_are_inactive_with_no_usable_password",
         "migration/tests/test_db_repo.py::test_multi_owner_detection_works_across_the_join",
         "migration/tests/test_db_repo.py::test_parent_edge_is_recorded_once_and_never_self_referential",
+        "migration/tests/test_limit_invalidates_joins.py::test_limit_inflates_join_failures_and_collapses_fieldlists",
+        "migration/tests/test_limit_invalidates_joins.py::test_sample_preserves_the_true_join_failure_count",
+        "migration/tests/test_limit_invalidates_joins.py::test_the_collapse_is_monotonic_in_the_limit",
+        "migration/tests/test_limit_invalidates_joins.py::test_the_runner_does_not_warn_without_limit",
+        "migration/tests/test_limit_invalidates_joins.py::test_the_runner_warns_when_limit_is_set",
+        "migration/tests/test_limit_invalidates_joins.py::test_the_warning_names_the_three_unreadable_figures",
+        "migration/tests/test_limit_invalidates_joins.py::test_unlimited_run_has_only_the_deliberate_join_failures",
         "migration/tests/test_pipeline.py::test_accounts_and_lists_created",
         "migration/tests/test_pipeline.py::test_degenerate_geometry_quarantined_not_invented",
         "migration/tests/test_pipeline.py::test_dry_run_writes_nothing",
