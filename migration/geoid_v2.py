@@ -78,12 +78,13 @@ def canonicalize(wkt_string: str) -> Polygon | MultiPolygon:
     if not parts:
         raise GeometryUnusable(f"no polygonal component in {geom.geom_type}")
 
-    # Orient every ring consistently. S2 decides shell vs hole by nesting depth,
-    # so all loops go in with the same winding.
-    parts = [orient(p, sign=1.0) for p in parts]
     parts = [p for p in parts if not p.is_empty and p.area > 0]
     if not parts:
         raise GeometryUnusable("all polygonal components are empty or zero-area")
+
+    # Orient every ring consistently. S2 decides shell vs hole by nesting depth,
+    # so all loops go in with the same winding.
+    parts = [orient(p, sign=1.0) for p in parts]
 
     return parts[0] if len(parts) == 1 else MultiPolygon(parts)
 
