@@ -12,10 +12,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from shapely.geometry import MultiPolygon, Polygon  # noqa: E402
+from shapely.geometry import MultiPolygon, Polygon
 
-from migration import geoid_v2 as g2  # noqa: E402
-from migration.resolve import CHILD_OF, NEW, SAME_AS, iou_and_containment, resolve  # noqa: E402
+from migration import geoid_v2 as g2
+from migration.resolve import (
+    CHILD_OF,
+    NEW,
+    SAME_AS,
+    iou_and_containment,
+    resolve,
+)
 
 D = 1 / 111_320.0  # degrees per metre at the equator
 

@@ -21,8 +21,8 @@ tests code you are not going to run.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from . import geoid_v2 as g2
 from .repo import (
@@ -120,7 +120,7 @@ def import_fields(
         try:
             tokens, v2_geo_id = g2.geo_id_with_tokens(legacy.wkt)
             content_hash = g2.content_hash(legacy.wkt)
-        except Exception:
+        except Exception:  # noqa: BLE001
             # Covers GeometryUnusable and any shapely/WKT parse failure. A field
             # whose geometry cannot be re-derived cannot be re-identified, so it
             # is quarantined rather than given a surrogate key.
@@ -221,7 +221,7 @@ def _canonicalization_altered(wkt: str) -> bool:
         if original.area == 0:
             return False
         return abs(original.area - canonical.area) / original.area > 1e-9
-    except Exception:
+    except Exception:  # noqa: BLE001
         return True
 
 

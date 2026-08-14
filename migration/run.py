@@ -134,13 +134,11 @@ def _open_repo(args):
     if not all(urls):
         raise SystemExit("--ar2-url, --hub-url and --pancake-url must be given together")
 
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, inspect
     from sqlalchemy.orm import Session
 
     from .db_repo import SqlAlchemyRepo
     from .models import Base, PancakeBase
-
-    from sqlalchemy import inspect
 
     ar2_engine = create_engine(args.ar2_url)
     hub_engine = create_engine(args.hub_url)

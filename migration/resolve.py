@@ -121,9 +121,8 @@ def resolve(
         if iou * 100.0 >= threshold_pct:
             if best_same is None or iou > best_same[0]:
                 best_same = (iou, cand_geo_id)
-        elif containment * 100.0 >= threshold_pct:
-            if best_child is None or containment > best_child[0]:
-                best_child = (containment, cand_geo_id)
+        elif containment * 100.0 >= threshold_pct and (best_child is None or containment > best_child[0]):
+            best_child = (containment, cand_geo_id)
 
     if best_same is not None:
         return Resolution(SAME_AS, best_same[1], best_same[0], best_cont)

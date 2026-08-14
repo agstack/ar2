@@ -17,9 +17,10 @@ Keep both connections READ-ONLY. AR 1.0 and TerraPipe are serving real users.
 from __future__ import annotations
 
 import random
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Iterator, Protocol
+from typing import Protocol
 
 # v1 identifier kinds. Which one a field got depended on registration order,
 # which is the defect v2 removes. UUID is the least trustworthy.
@@ -146,16 +147,16 @@ class Ar1TerraPipeSource:
         return psycopg2.connect(self.terrapipe_dsn)
 
     def iter_fields(self, limit: int | None = None) -> Iterator[LegacyField]:
-        import json
         import hashlib
+        import json
+
         from psycopg2.extras import DictCursor
         
         query = "SELECT geo_id, geo_data, country, created_at FROM geo_ids"
         if limit is not None:
             query += f" LIMIT {limit}"
             
-        with self._get_ar1_conn() as conn:
-            with conn.cursor(cursor_factory=DictCursor) as cur:
+        with self._get_ar1_conn() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
                 cur.execute(query)
                 for row in cur:
                     issued_id = row['geo_id']
@@ -168,7 +169,7 @@ class Ar1TerraPipeSource:
                         if isinstance(geo_data_raw, str):
                             try:
                                 geo_data = json.loads(geo_data_raw)
-                            except:
+                            except Exception:  # noqa: BLE001, S110  # noqa: BLE001, S110
                                 pass
                         elif isinstance(geo_data_raw, dict):
                             geo_data = geo_data_raw
@@ -177,7 +178,7 @@ class Ar1TerraPipeSource:
                         if isinstance(geo_data, str):
                             try:
                                 geo_data = json.loads(geo_data)
-                            except:
+                            except Exception:  # noqa: BLE001  # noqa: BLE001, S110
                                 geo_data = {}
 
                     wkt = geo_data.get('wkt') if isinstance(geo_data, dict) else None
@@ -224,8 +225,7 @@ class Ar1TerraPipeSource:
         if limit is not None:
             query += f" LIMIT {limit}"
             
-        with self._get_tp_conn() as conn:
-            with conn.cursor(cursor_factory=DictCursor) as cur:
+        with self._get_tp_conn() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
                 cur.execute(query)
                 for row in cur:
                     gids = row['geo_ids']
@@ -260,7 +260,7 @@ class Ar1TerraPipeSource:
                     inv.parseable_geometry += 1
                     if geom.is_empty or geom.area <= 0:
                         inv.zero_or_invalid_area += 1
-                except Exception:
+                except Exception:  # noqa: BLE001, S110
                     pass
             band = _area_band(f.area_ha)
             inv.area_bands[band] = inv.area_bands.get(band, 0) + 1
@@ -533,7 +533,7 @@ class FixtureSource:
                     inv.parseable_geometry += 1
                     if geom.is_empty or geom.area <= 0:
                         inv.zero_or_invalid_area += 1
-                except Exception:
+                except Exception:  # noqa: BLE001, S110
                     pass
             band = _area_band(f.area_ha)
             inv.area_bands[band] = inv.area_bands.get(band, 0) + 1

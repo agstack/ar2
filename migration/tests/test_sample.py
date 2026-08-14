@@ -47,7 +47,7 @@ def test_same_owner_l13_cluster_is_separated_from_the_multi_owner_one():
 
 
 def test_every_hazard_stratum_is_represented():
-    src, sample = _sample()
+    _src, sample = _sample()
     for stratum in (STRATUM_MULTI_OWNER, STRATUM_UUID, STRATUM_NO_GEOMETRY,
                     STRATUM_UNPARSEABLE, STRATUM_ORPHAN, STRATUM_UNCLAIMED,
                     STRATUM_MANY_FIELDS):
@@ -92,7 +92,7 @@ def test_the_profile_holding_an_orphan_ref_is_still_in_the_sample():
 
 
 def test_area_bands_are_all_present():
-    src, sample = _sample()
+    _src, sample = _sample()
     bands = [k for k in sample.strata if k.startswith("area_") and sample.strata[k]]
     assert len(bands) >= 4
 

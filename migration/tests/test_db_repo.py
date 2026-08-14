@@ -15,7 +15,14 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from ..db_repo import SqlAlchemyRepo
-from ..models import Base, FieldList, GeoIDRegimeAlias, HubUser, PancakeBase, PancakeUser
+from ..models import (
+    Base,
+    FieldList,
+    GeoIDRegimeAlias,
+    HubUser,
+    PancakeBase,
+    PancakeUser,
+)
 from ..pipeline import import_fields, import_profiles
 from ..repo import (
     AliasRow,

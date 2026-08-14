@@ -25,8 +25,8 @@ hazards are kept and filler is dropped.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 from .sources import KIND_L20, KIND_UUID, LegacyField, LegacyProfile
 
@@ -79,8 +79,8 @@ class Sample:
 
     def justification(self) -> str:
         lines = [
-            f"sample of {len(self.field_ids)} fields and {len(self.profile_keys)} "
-            f"profiles (budget {self.budget})",
+            (f"sample of {len(self.field_ids)} fields and {len(self.profile_keys)} "
+             f"profiles (budget {self.budget})"),
             "",
             "selected for these hazards:",
         ]
@@ -108,7 +108,7 @@ def _parse_ok(wkt: str | None) -> bool:
         from shapely.wkt import loads
         geom = loads(wkt)
         return not geom.is_empty
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
 
 

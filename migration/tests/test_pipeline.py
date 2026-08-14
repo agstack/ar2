@@ -10,19 +10,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import pytest  # noqa: E402
+import pytest
 
-from migration import geoid_v2 as g2  # noqa: E402
-from migration.pipeline import (  # noqa: E402
+from migration import geoid_v2 as g2
+from migration.pipeline import (
     QUARANTINE_DUPLICATE_CONTENT,
     QUARANTINE_NO_GEOMETRY,
     QUARANTINE_UNUSABLE,
     OutOfOrder,
-    import_fields,
     import_profiles,
+    import_fields,
 )
-from migration.repo import InMemoryRepo  # noqa: E402
-from migration.sources import FixtureSource  # noqa: E402
+from migration.repo import InMemoryRepo
+from migration.sources import FixtureSource
 
 
 @pytest.fixture
@@ -55,7 +55,7 @@ def test_inventory_is_self_consistent(src):
 
 # ------------------------------------------------------------------ phase 1
 
-def test_fields_imported_and_aliased(imported):
+def testfields_imported_and_aliased(imported):
     repo, fields, _ = imported
     assert fields.considered > 0
     assert fields.imported_new > 0
@@ -105,7 +105,7 @@ def test_degenerate_geometry_quarantined_not_invented(imported, src):
 
 def test_exact_duplicate_geometry_aliases_rather_than_failing(imported, src):
     """content_hash is UNIQUE in ar2; the second copy must alias, not crash."""
-    repo, fields, _ = imported
+    repo, _fields, _ = imported
     a = repo.resolve_v1(src.exact_dup_a)
     b = repo.resolve_v1(src.exact_dup_b)
     assert a is not None and b is not None
@@ -171,7 +171,7 @@ def test_dry_run_writes_nothing(src):
 
 # ------------------------------------------------------------------ ordering
 
-def test_profiles_refuse_to_run_before_fields(src):
+def test_profiles_refuse_to_run_beforefields(src):
     repo = InMemoryRepo()
     with pytest.raises(OutOfOrder):
         import_profiles(src, repo)
@@ -225,13 +225,13 @@ def test_user_field_set_matches_source(imported, src):
 
 # ------------------------------------------------------------------ the M6 case
 
-def test_merged_fields_produce_shared_ownership_and_it_is_surfaced(imported, src):
+def test_mergedfields_produce_shared_ownership_and_it_is_surfaced(imported, src):
     """Two users, near-identical polygons -> one v2 GeoID -> two owners.
 
     Legal in the data model, since the registry records no ownership. But it
     means user A can see user B's field data, so it MUST be reported.
     """
-    repo, fields, profiles = imported
+    repo, _fields, profiles = imported
 
     a = repo.resolve_v1(src.near_dup_a)
     b = repo.resolve_v1(src.near_dup_b)
