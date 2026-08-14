@@ -55,7 +55,7 @@ def test_inventory_is_self_consistent(src):
 
 # ------------------------------------------------------------------ phase 1
 
-def testfields_imported_and_aliased(imported):
+def test_fields_imported_and_aliased(imported):
     repo, fields, _ = imported
     assert fields.considered > 0
     assert fields.imported_new > 0
@@ -171,7 +171,7 @@ def test_dry_run_writes_nothing(src):
 
 # ------------------------------------------------------------------ ordering
 
-def test_profiles_refuse_to_run_beforefields(src):
+def test_profiles_refuse_to_run_before_fields(src):
     repo = InMemoryRepo()
     with pytest.raises(OutOfOrder):
         import_profiles(src, repo)
@@ -225,7 +225,7 @@ def test_user_field_set_matches_source(imported, src):
 
 # ------------------------------------------------------------------ the M6 case
 
-def test_mergedfields_produce_shared_ownership_and_it_is_surfaced(imported, src):
+def test_merged_fields_produce_shared_ownership_and_it_is_surfaced(imported, src):
     """Two users, near-identical polygons -> one v2 GeoID -> two owners.
 
     Legal in the data model, since the registry records no ownership. But it
