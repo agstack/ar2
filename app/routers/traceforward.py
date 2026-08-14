@@ -27,6 +27,13 @@ router = APIRouter(tags=["Trace Forward"])
 
 class RegisterListRequest(BaseModel):
     members: list[str]
+    # Where this lot is being created: the FSMA 204 traceability lot code source
+    # (21 CFR 1.1330(a)(14), 1.1350(a)(2)(ii)). A GeoID, so a packhouse or plant
+    # is identified exactly as a field is. Optional -- omitting it records a gap
+    # rather than failing, because a lot with no recorded creation site is a real
+    # state and the trace has to be able to say so.
+    location_geo_id: str | None = None
+    event_type: str | None = None   # harvest | initial_pack | transformation | ...
 
 class RegisterListResponse(BaseModel):
     list_id: str
@@ -60,7 +67,17 @@ def register_list_artifact(
     if existing:
         return RegisterListResponse(list_id=list_id, message="ListArtifact already exists")
 
-    new_artifact = ListArtifact(list_id=list_id)
+    # The location is metadata, deliberately NOT folded into the Merkle root, so
+    # existing ListIDs keep their values and a caller can add a location to a
+    # lot code that already exists. The consequence is that two packings of the
+    # identical field set at two sites share one ListID; if that needs to be two
+    # lots, the location has to enter the root and every existing ListID changes.
+    # Recorded as an open decision rather than settled here.
+    new_artifact = ListArtifact(
+        list_id=list_id,
+        location_geo_id=payload.location_geo_id,
+        event_type=payload.event_type,
+    )
     db.add(new_artifact)
     try:
         db.flush()
@@ -218,9 +235,205 @@ def get_list_artifact_reverse(
 ):
     """
     Retrieves all list IDs that contain the given geoid.
+
+    Expands the seed through its equivalence set first, so a v1 GeoID, a
+    superseded content-hash alias and the canonical GeoID all return the same
+    lists. Without this the reverse lookup silently disagrees with
+    /traceforward about what counts as the same field.
     """
-    list_ids = db.execute(select(ListMemberEdge.list_id).where(ListMemberEdge.geoid == geoid)).scalars().all()
-    return ListReverseResponse(list_ids=list(list_ids))
+    seeds = _equivalence_set(db, geoid)
+    list_ids = db.execute(
+        select(ListMemberEdge.list_id).where(ListMemberEdge.geoid.in_(seeds))
+    ).scalars().all()
+    return ListReverseResponse(list_ids=sorted(set(list_ids)))
+
+
+# --------------------------------------------------------------------------
+# Trace-back: one hop per lot.
+#
+# 21 CFR 1.1320(a) assigns a new traceability lot code at exactly three events --
+# initial packing, first land-based receiving, and transformation. Each is the
+# creation of a lot, and a ListArtifact is created at exactly those moments. So
+# one list is one lot is one hop, and the hop is the regulation's own unit of
+# record rather than an artifact of how we happen to traverse.
+#
+# Each hop reports where its lot was created (the traceability lot code source,
+# 1.1330(a)(14) and 1.1350(a)(2)(ii)) as a GeoID, and which lots fed into it
+# (1.1350(a)(1) requires the new lot to be linked to each input lot). Flattening
+# to a set of GeoIDs would answer "which fields" while destroying "by what
+# route", and the route is what lets an investigator narrow a recall.
+# --------------------------------------------------------------------------
+
+MAX_TRACEBACK_DEPTH = 64
+
+
+class TraceBackEdge(BaseModel):
+    parent_list_id: str
+    child_id: str
+    kind: str            # "list" | "region" | "geoid"
+
+
+class TraceBackHop(BaseModel):
+    """One lot: where it was created, what was in it, what fed it."""
+    list_id: str
+    depth: int
+    event_type: str | None = None
+    location_geo_id: str | None = None
+    location_recorded: bool = False
+    geoids: list[str] = []               # fields directly in this lot
+    input_list_ids: list[str] = []       # lots consumed to make this one
+    input_region_ids: list[str] = []
+    created_at: str | None = None
+
+
+class TraceBackResponse(BaseModel):
+    root_list_id: str
+    hops: list[TraceBackHop]
+    edges: list[TraceBackEdge]
+    geoids: list[str]                    # transitive closure: fields to inspect
+    locations: list[str] = []            # the chain of places, in hop order
+    hops_missing_location: list[str] = []
+    region_ids: list[str] = []
+    # True when any hop cited a region. The field set is then a lower bound: the
+    # region's own fields are resolved spatially by /traceforward and are not
+    # read back here. Callers must expand the regions to complete the trace.
+    regions_unexpanded: bool = False
+    max_depth: int
+    truncated: bool = False
+
+
+@router.get("/list-artifact/{list_id}/traceback", response_model=TraceBackResponse)
+def trace_back(
+    list_id: str,
+    max_depth: int = MAX_TRACEBACK_DEPTH,
+    x_grant_token: str | None = Header(None),
+    x_authority_token: str | None = Header(None),
+    x_pancake_internal: str | None = Header(None),
+    user: dict = Depends(require_hub_user),
+    db: Session = Depends(get_db),
+):
+    """Walk downward from a list artifact to the fields, one hop per step.
+
+    Authorization is identical to GET /list-artifact/{list_id}: a grant scoped to
+    the list, or an authority credential. Authority use is written to the MEAL
+    ledger, because a regulator reading a whole supply chain is exactly the event
+    that must be auditable.
+    """
+    if not _is_trusted_internal(x_pancake_internal):
+        from app.auth import authorize_artifact
+        from app.meal_logger import log_traceback
+        auth_result = authorize_artifact(
+            x_grant_token, x_authority_token, list_id=list_id, raise_404_on_fail=True
+        )
+        if auth_result.get("used_authority"):
+            log_traceback(user.get("sub"), auth_result.get("authority_jti"), list_id)
+
+    root = db.execute(
+        select(ListArtifact).where(ListArtifact.list_id == list_id)
+    ).scalar_one_or_none()
+    if not root:
+        raise HTTPException(status_code=404, detail="ListArtifact not found")
+
+    depth_cap = max(1, min(max_depth, MAX_TRACEBACK_DEPTH))
+
+    hops: list[TraceBackHop] = []
+    edges: list[TraceBackEdge] = []
+    all_geoids: set[str] = set()
+    all_regions: set[str] = set()
+    truncated = False
+
+    # Breadth-first over lots. A lot reached by two routes is reported once, at
+    # the shallowest depth it was reached. Cycles cannot arise through a
+    # content-derived ListID -- a lot would have to contain its own root -- but a
+    # corrupt edge must not be able to hang the node.
+    frontier = [list_id]
+    seen: set[str] = {list_id}
+
+    for depth in range(depth_cap):
+        if not frontier:
+            break
+
+        artifacts = {
+            a.list_id: a
+            for a in db.execute(
+                select(ListArtifact).where(ListArtifact.list_id.in_(frontier))
+            ).scalars().all()
+        }
+        members = db.execute(
+            select(ListMemberEdge.list_id, ListMemberEdge.geoid)
+            .where(ListMemberEdge.list_id.in_(frontier))
+        ).all()
+        child_lists = db.execute(
+            select(ListParentEdge.parent_list_id, ListParentEdge.child_list_id)
+            .where(ListParentEdge.parent_list_id.in_(frontier))
+        ).all()
+        child_regions = db.execute(
+            select(RegionParentEdge.parent_list_id, RegionParentEdge.child_region_id)
+            .where(RegionParentEdge.parent_list_id.in_(frontier))
+        ).all()
+
+        by_lot_geoids: dict[str, set[str]] = {}
+        by_lot_inputs: dict[str, set[str]] = {}
+        by_lot_regions: dict[str, set[str]] = {}
+
+        for parent, geoid in members:
+            by_lot_geoids.setdefault(parent, set()).add(geoid)
+            edges.append(TraceBackEdge(parent_list_id=parent, child_id=geoid, kind="geoid"))
+        for parent, child in child_lists:
+            by_lot_inputs.setdefault(parent, set()).add(child)
+            edges.append(TraceBackEdge(parent_list_id=parent, child_id=child, kind="list"))
+        for parent, region in child_regions:
+            by_lot_regions.setdefault(parent, set()).add(region)
+            edges.append(TraceBackEdge(parent_list_id=parent, child_id=region, kind="region"))
+
+        # One hop per lot, not one per depth level: a depth level can hold several
+        # unrelated lots, which is a fact about the traversal and not about the
+        # supply chain.
+        for lot in sorted(frontier):
+            artifact = artifacts.get(lot)
+            location = artifact.location_geo_id if artifact else None
+            hops.append(TraceBackHop(
+                list_id=lot,
+                depth=depth,
+                event_type=artifact.event_type if artifact else None,
+                location_geo_id=location,
+                location_recorded=location is not None,
+                geoids=sorted(by_lot_geoids.get(lot, set())),
+                input_list_ids=sorted(by_lot_inputs.get(lot, set())),
+                input_region_ids=sorted(by_lot_regions.get(lot, set())),
+                created_at=artifact.created_at.isoformat() if artifact and artifact.created_at else None,
+            ))
+
+        all_geoids |= {g for _, g in members}
+        all_regions |= {r for _, r in child_regions}
+
+        next_frontier = {c for _, c in child_lists} - seen
+        frontier = sorted(next_frontier)
+        seen |= next_frontier
+
+        if frontier and depth == depth_cap - 1:
+            truncated = True
+
+    # Regions are reported, not expanded into fields. Region membership is
+    # spatial: /traceforward matches a field to a region by testing the field's
+    # S2 cells and their ancestors against RegionCoverCell, and a region has no
+    # membership rows to read back. Inverting that is a prefix query over covers,
+    # not a lookup, so it is deliberately not attempted here -- and a lot that
+    # cites a region therefore has a field set we cannot claim is complete.
+    # Saying so is the point: a partial answer that looks total is the failure
+    # mode that makes an investigator under-scope a recall.
+    return TraceBackResponse(
+        root_list_id=list_id,
+        hops=hops,
+        edges=edges,
+        geoids=sorted(all_geoids),
+        locations=[h.location_geo_id for h in hops if h.location_geo_id],
+        hops_missing_location=[h.list_id for h in hops if not h.location_recorded],
+        region_ids=sorted(all_regions),
+        regions_unexpanded=bool(all_regions),
+        max_depth=max((h.depth for h in hops), default=0),
+        truncated=truncated,
+    )
 
 
 class TraceForwardRequest(BaseModel):
