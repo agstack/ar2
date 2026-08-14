@@ -25,6 +25,7 @@ by a wrong implementation.
 import hashlib
 import math
 import os
+import random
 import uuid
 
 import pytest
@@ -64,12 +65,18 @@ def _square(lat: float, lng: float, metres: float) -> str:
 # A patch of ocean, so these fixtures cannot overlap anything another suite
 # registers near a real farm.
 BASE_LAT, BASE_LNG = -34.5, -140.5
-_offset = [0]
+
+# Each run takes its own latitude band. A counter starting at zero would make the
+# suite pass once and then fail against its own leftovers, because these fixtures
+# insert rows directly and geo_id is unique -- identical geometry is, correctly,
+# the same field. The tests have to be re-runnable against a database that
+# already holds a previous run.
+_offset = [random.randint(0, 2000) * 100]
 
 
 def _fresh_square(metres: float = 200.0) -> str:
     _offset[0] += 1
-    return _square(BASE_LAT + _offset[0] * 0.01, BASE_LNG, metres)
+    return _square(BASE_LAT + (_offset[0] % 200000) * 0.0001, BASE_LNG, metres)
 
 
 # ==========================================================================
@@ -339,7 +346,7 @@ def test_two_nearby_fields_get_different_identifiers():
     so two fields 300 m apart shared an identifier and the cascade escaped into a
     UUID."""
     a = _fresh_square(100)
-    b = _square(BASE_LAT + _offset[0] * 0.01 + 0.003, BASE_LNG, 100)
+    b = _square(BASE_LAT + (_offset[0] % 200000) * 0.0001 + 0.003, BASE_LNG, 100)
 
     ra = client.post("/register-field-boundary",
                      json={"wkt": a, "threshold": 95, "return_s2_indices": False})

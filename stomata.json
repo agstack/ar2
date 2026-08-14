@@ -1,0 +1,137 @@
+{
+  "schema_version": "1.0.0",
+
+  "_comment": [
+    "AR2's contract with the harness. Machine-read by stomata; edited by humans.",
+    "",
+    "Adding a suite, a reachability claim, a forbidden pattern or a mutation here is",
+    "how a guarantee becomes enforced rather than remembered. Removing one is a",
+    "visible diff, which is the point: a check that can vanish quietly is not a check.",
+    "",
+    "Commands use {python} rather than a bare interpreter name so the same contract",
+    "works in a virtualenv, a container and CI without edits."
+  ],
+
+  "python": "python3",
+
+  "suites": [
+    {
+      "name": "ar2",
+      "command": "{python} -m pytest app/tests -q",
+      "needs_database": true,
+      "why": "The service's own behaviour: field registration and identity resolution, grant issuance and revocation, the two authorization gates, tiered disclosure, trace-forward and trace-back."
+    },
+    {
+      "name": "migration",
+      "command": "{python} -m pytest migration/tests -q",
+      "needs_database": false,
+      "why": "The legacy import pipeline, which runs against SQLite fixtures and needs no server.",
+      "allow_skips": [
+        "test_schema_drift.py"
+      ],
+      "_allow_skips_why": [
+        "The drift guard compares migration/models.py against the real ar2-hub and",
+        "pancake schemas, so it can only run where those repositories are checked out.",
+        "Locally it skips, which means it passes without comparing anything -- exactly",
+        "the shape of problem that let Pancake's cross-layer tests report green while",
+        "never running. It is waived HERE and must not be waived in CI: the CI runner",
+        "checks out both repositories, so a skip there is a real failure. Deleting this",
+        "waiver is the correct move the moment local runs can see both schemas."
+      ]
+    }
+  ],
+
+  "lint": {
+    "command": "{python} -m ruff check app migration --output-format concise",
+    "why": "Counted, not required-zero. app/ carries pre-existing E402 violations that predate this work; the contract is that the count may fall and may not rise. A zero-violation gate we cannot turn on today is a gate we never turn on."
+  },
+
+  "reachability": [
+    {
+      "symbol": "geoid_v2.geo_id_with_tokens",
+      "callers_must_include": ["app/routers/field_registration.py"],
+      "why": "GeoID v2 must decide identity in the live registration path. It existed fully implemented, with a green 20-vector conformance suite and property tests, and no caller anywhere in the service for two days. That is the failure this check exists for: a tested, committed, unreachable module is indistinguishable from a delivered feature until someone reads the router."
+    },
+    {
+      "symbol": "iou_and_containment",
+      "callers_must_include": ["app/utils.py"],
+      "why": "Resolution must compare covers by area. Token-set overlap cannot see ancestor/descendant intersection, which is fatal once covers are normalized and multi-level."
+    },
+    {
+      "symbol": "GeoIDRegimeAlias",
+      "callers_must_include": ["app/routers/traceforward.py"],
+      "why": "v1 identifiers must resolve. The import pipeline wrote this table before anything read it, and a mapping nothing reads means every trace seeded with an identifier AR 1.0 issued returns an empty result -- confident, and wrong."
+    },
+    {
+      "symbol": "location_geo_id",
+      "callers_must_include": [
+        "app/routers/traceforward.py",
+        "scripts/schema_upgrade_20260814.sql"
+      ],
+      "why": "Per-hop locations must be both queried and present in the schema. create_all adds missing tables but never missing columns, so the SQL script is the only thing that reaches a database that already exists -- and CI cannot catch its absence, because CI starts empty every run."
+    }
+  ],
+
+  "forbidden": [
+    {
+      "pattern": "generate_geo_id\\(indices\\[13\\]\\)",
+      "paths": ["app/routers"],
+      "why": "The L13 cover hash was the collision source v2 replaces. An L13 cell is roughly 1.2 km across, so two genuinely different fields inside one cell received the same identifier."
+    },
+    {
+      "pattern": "=\\s*str\\(uuid\\.uuid4\\(\\)\\)",
+      "paths": ["app/routers/field_registration.py"],
+      "why": "The cascade's last resort. A GeoID from uuid4 is derived from nothing, cannot be recomputed by anyone, and is indistinguishable downstream from a real content-derived one."
+    },
+    {
+      "pattern": "area_ratio",
+      "paths": ["app/utils.py"],
+      "why": "The area pre-filter gated all same_as resolution and evaluated to zero whenever either area was missing, so every import with absent area silently became a duplicate rather than resolving to the field it matched."
+    }
+  ],
+
+  "mutations": [
+    {
+      "name": "cover the bounding box instead of the polygon",
+      "path": "app/geoid_v2.py",
+      "find": "    poly = _s2_polygon(geom)",
+      "replace": "    poly = _s2_polygon(geom.envelope)",
+      "must_fail_at_least": 2,
+      "why": "The original defect: hashing a bounding box rather than the field. If this passes, nothing is actually testing that the cover follows the geometry."
+    },
+    {
+      "name": "reverse the token order",
+      "path": "app/geoid_v2.py",
+      "find": "    return sorted(cid.ToToken() for cid in union.cell_ids())",
+      "replace": "    return sorted((cid.ToToken() for cid in union.cell_ids()), reverse=True)",
+      "must_fail_at_least": 1,
+      "why": "Token order is part of the identity, since the GeoID is a hash over the concatenation. This replaced an earlier mutation that merely deleted the sorted() call, which no test could detect: S2CellUnion.Init already returns ids in order, so the unsorted output was coincidentally sorted and every assertion still held. That mutation was testing whether a line of code was present rather than whether the property mattered -- worth recording, because it is the easy mistake to make when writing mutations."
+    },
+    {
+      "name": "discard interior rings",
+      "path": "app/geoid_v2.py",
+      "find": "        for interior in part.interiors:",
+      "replace": "        for interior in []:",
+      "must_fail_at_least": 1,
+      "why": "Reintroduces the hole bug, where a field with a pond hashed identically to the solid shape."
+    },
+    {
+      "name": "revert to token-set overlap",
+      "path": "app/geoid_v2.py",
+      "find": "    intersection = a.Intersection(b)",
+      "replace": "    intersection = _union_from_tokens(set(_tokens_of(a)) & set(_tokens_of(b)))",
+      "must_fail_at_least": 1,
+      "why": "The exact arithmetic the IoU fix replaced. It must not be able to pass."
+    },
+    {
+      "name": "stop following regime aliases",
+      "path": "app/routers/traceforward.py",
+      "find": "    roots = {seed, *canonical, *v1_to_v2}",
+      "replace": "    roots = {seed, *canonical}",
+      "must_fail_at_least": 1,
+      "why": "Silently breaks every trace seeded with a v1 identifier, which is the shape of bug that returns an empty answer rather than an error."
+    }
+  ],
+
+  "test_path_markers": ["app/tests/", "migration/tests/", "test_", "conftest.py"]
+}
