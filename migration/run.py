@@ -14,6 +14,14 @@ Import rehearsal runner.
 anything whose result you intend to believe: a prefix of the table is ordered by
 insertion and will contain none of the cases that break an import.
 
+--limit also caps FIELDS ONLY -- every profile still runs. So each profile is
+joined against a truncated registry, most of its GeoIDs are simply absent, and
+the profile phase reports a flood of join failures and almost no field lists.
+Accounts stay at the full count while field lists collapse toward zero. That
+shape is an artifact of the flag and says nothing about the data or the join
+key. --sample does not have this problem: it selects fields and the profiles
+that own them together, so both phases stay consistent.
+
 Prints the M1 inventory, the M2 sample justification, the M3 field-import report
 and the M4 profile-import report. Exit code is non-zero when a finding needs a
 decision, so this can gate a pipeline rather than being read by eye.
@@ -31,6 +39,24 @@ from .sample import SampledSource, build_sample
 from .sources import Ar1TerraPipeSource, FixtureSource
 
 BAR = "=" * 78
+
+LIMIT_WARNING = """
+{bar}
+!! --limit={limit} IS SET. EVERY JOIN FIGURE BELOW IS AN ARTIFACT.
+{bar}
+--limit truncates FIELDS only; all profiles still run. Each profile is therefore
+joined against a partial registry, so most of its GeoIDs are absent and:
+
+  * `accounts created` stays at the full profile count
+  * `fieldlists created` collapses toward zero
+  * `join failures` inflates toward the total association count
+
+None of that reflects the data or the join key. Do not read `join failures`,
+`fieldlists created` or `associations mapped` from this run.
+
+For figures you intend to believe, drop --limit, or use --sample N, which draws
+fields and the profiles that own them together.
+{bar}""".format(bar="!" * 78, limit="{limit}")
 
 
 def _h(title: str) -> None:
@@ -186,7 +212,8 @@ def main(argv=None) -> int:
     ap.add_argument("--ar1-dsn", default="")
     ap.add_argument("--terrapipe-dsn", default="")
     ap.add_argument("--limit", type=int, default=None,
-                    help="naive prefix; smoke tests only, prefer --sample")
+                    help="naive prefix of FIELDS only; invalidates every join "
+                         "figure. Smoke tests only -- use --sample instead")
     ap.add_argument("--sample", type=int, default=None, metavar="N",
                     help="adversarial stratified sample of N fields")
     ap.add_argument("--sample-cap", type=int, default=200,
@@ -212,6 +239,9 @@ def main(argv=None) -> int:
 
     print(f"source={args.source}  threshold={args.threshold}%  "
           f"limit={args.limit or 'none'}  dry_run={args.dry_run}")
+
+    if args.limit:
+        print(LIMIT_WARNING.format(limit=args.limit))
 
     inv = source.inventory()
     print_inventory(inv)
@@ -259,9 +289,16 @@ def main(argv=None) -> int:
             f"{sum(len(v) for v in profiles.accounts_rejected.values())} accounts "
             f"rejected on hub constraints — decide how to admit them.")
     if profiles.join_failure_total:
-        decisions.append(
-            f"{profiles.join_failure_total} associations failed to join — each one is "
-            f"a user who will not see one of their fields.")
+        if args.limit:
+            decisions.append(
+                f"{profiles.join_failure_total} associations failed to join — but "
+                f"--limit={args.limit} was set, so this number is an artifact and "
+                f"means nothing. Re-run without --limit, or with --sample, before "
+                f"treating it as a finding.")
+        else:
+            decisions.append(
+                f"{profiles.join_failure_total} associations failed to join — each one is "
+                f"a user who will not see one of their fields.")
 
     if not decisions:
         print("  none.")
