@@ -61,6 +61,39 @@ class GeoIDAlias(Base):
     accuracy_class = Column(String, nullable=True)
     created_at = Column(DateTime, default=get_utc_now)
     relation = Column(Enum('same_as', 'child_of', name='relation_enum'), nullable=False)
+
+
+class GeoIDRegimeAlias(Base):
+    """v1 -> v2 identifier mapping, written by the legacy import.
+
+    Distinct from GeoIDAlias, which keys on a content hash and records that two
+    *submissions* describe one field. This keys on the v1 identifier itself,
+    because AR 1.0 issued those identifiers to real users over several years and
+    they persist in TerraPipe, in exports and in print. They have to keep
+    resolving permanently.
+
+    Read by _equivalence_set: without it, a trace-forward seeded with a v1 GeoID
+    returns nothing for a field that is present under its v2 identifier. That is
+    the worst failure shape available -- a confident, empty, wrong answer.
+
+    String(128) rather than 64 because v1 identifiers include the 36-character
+    uuid4() fallbacks the old cascade minted on collision.
+    """
+
+    __tablename__ = 'geo_id_regime_alias'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    v1_geo_id = Column(String(128), unique=True, index=True, nullable=False)
+    v2_geo_id = Column(String(64), ForeignKey('geo_ids.geo_id', ondelete='CASCADE'),
+                       index=True, nullable=False)
+    v1_kind = Column(String(16))
+    v1_regime = Column(String(8), default='v1')
+    v2_regime = Column(String(8), default='v2')
+    relation = Column(Enum('same_as', 'child_of', name='regime_relation_enum'),
+                      nullable=False, default='same_as')
+    created_at = Column(DateTime, default=get_utc_now)
+
+
 class ListArtifact(Base):
     __tablename__ = 'list_artifact'
 

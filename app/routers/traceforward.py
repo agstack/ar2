@@ -14,6 +14,7 @@ from app.merkle import canonical_members, merkle_root
 from app.models.geo_id_model import (
     GeoID,
     GeoIDAlias,
+    GeoIDRegimeAlias,
     ListArtifact,
     ListMemberEdge,
     ListParentEdge,
@@ -259,17 +260,45 @@ def _resolve_holders(list_ids: set[str], authority_token: str, scope: str, seed_
         raise HTTPException(status_code=502, detail=f"holder resolution failed: {e}")
 
 def _equivalence_set(db: Session, seed: str) -> set[str]:
-    """Seed + all GeoIDs that are the same physical field (same_as, both directions)."""
+    """Seed + every GeoID that denotes the same physical field.
+
+    Three sources, and all three are needed:
+
+      * GeoIDAlias, keyed on content hash: two submissions of one field.
+      * GeoIDRegimeAlias, keyed on the v1 identifier: the same field before and
+        after the v2 regime change. A trace seeded with an identifier AR 1.0
+        issued years ago must still reach the field, and those identifiers are
+        still in circulation.
+      * The reverse of each, so the set is the same whichever member you start
+        from. Asymmetry here would mean the answer depended on which identifier
+        the caller happened to hold.
+
+    Only same_as is followed. child_of is a containment relation, not an identity
+    one, and collapsing it here would silently widen every trace to the parent.
+    """
     canonical = db.execute(
         select(GeoIDAlias.canonical_geo_id)
         .where(GeoIDAlias.alias_content_hash == seed, GeoIDAlias.relation == "same_as")
     ).scalars().all()
-    roots = {seed, *canonical}
+
+    # v1 seed -> its v2 identity, and a v2 seed -> every v1 identifier for it.
+    v1_to_v2 = db.execute(
+        select(GeoIDRegimeAlias.v2_geo_id)
+        .where(GeoIDRegimeAlias.v1_geo_id == seed, GeoIDRegimeAlias.relation == "same_as")
+    ).scalars().all()
+
+    roots = {seed, *canonical, *v1_to_v2}
+
     aliases = db.execute(
         select(GeoIDAlias.alias_content_hash)
         .where(GeoIDAlias.canonical_geo_id.in_(roots), GeoIDAlias.relation == "same_as")
     ).scalars().all()
-    return roots | set(aliases)
+    v2_to_v1 = db.execute(
+        select(GeoIDRegimeAlias.v1_geo_id)
+        .where(GeoIDRegimeAlias.v2_geo_id.in_(roots), GeoIDRegimeAlias.relation == "same_as")
+    ).scalars().all()
+
+    return roots | set(aliases) | set(v2_to_v1)
 
 @router.post("/traceforward", response_model=TraceForwardResponse, response_model_exclude_none=True)
 def run_traceforward(
