@@ -98,7 +98,7 @@ def _mirror(base, table: str) -> set[str]:
     ("hub", "users", Base),
     ("pancake", "users", PancakeBase),
     ("pancake", "fieldlists", PancakeBase),
-    ("pancake", "fieldlist_members", PancakeBase),
+    ("ar2", "listmember_edge", Base),
 ])
 def test_mirrored_columns_match_the_real_schema(which, table, mirror_base):
     path = _locate(which)

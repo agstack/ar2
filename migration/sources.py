@@ -137,34 +137,169 @@ class Ar1TerraPipeSource:
         self.ar1_dsn = ar1_dsn
         self.terrapipe_dsn = terrapipe_dsn
 
-    def inventory(self) -> Inventory:
-        """M1. The one query that matters most:
+    def _get_ar1_conn(self):
+        import psycopg2
+        return psycopg2.connect(self.ar1_dsn)
 
-            SELECT COUNT(*), COUNT(DISTINCT <l13_geoid_column>) FROM <fields>;
-
-        The gap between those two numbers is the AR1 collision count. Populate
-        every field of Inventory; `ar1_collision_count` falls out of it.
-
-        Also establish, and record in the handoff notes rather than here: what
-        did AR 1.0 do when two fields hashed to the same L13 GeoID -- did the
-        second registration fail, or silently return the first field's record?
-        If the latter, some users hold a GeoID pointing at someone else's field.
-        """
-        raise NotImplementedError("F1/M1: implement against the AR1 + TerraPipe schemas")
+    def _get_tp_conn(self):
+        import psycopg2
+        return psycopg2.connect(self.terrapipe_dsn)
 
     def iter_fields(self, limit: int | None = None) -> Iterator[LegacyField]:
-        """Stream AR 1.0 registrations.
+        import json
+        import hashlib
+        from psycopg2.extras import DictCursor
+        
+        query = "SELECT geo_id, geo_data, country, created_at FROM geo_ids"
+        if limit is not None:
+            query += f" LIMIT {limit}"
+            
+        with self._get_ar1_conn() as conn:
+            with conn.cursor(cursor_factory=DictCursor) as cur:
+                cur.execute(query)
+                for row in cur:
+                    issued_id = row['geo_id']
+                    geo_data_raw = row['geo_data']
+                    country = row['country']
+                    created_at = row['created_at']
+                    
+                    geo_data = {}
+                    if geo_data_raw:
+                        if isinstance(geo_data_raw, str):
+                            try:
+                                geo_data = json.loads(geo_data_raw)
+                            except:
+                                pass
+                        elif isinstance(geo_data_raw, dict):
+                            geo_data = geo_data_raw
+                            
+                        # Handle double encoding: sometimes it's stringified JSON inside JSON
+                        if isinstance(geo_data, str):
+                            try:
+                                geo_data = json.loads(geo_data)
+                            except:
+                                geo_data = {}
 
-        Set `v1_kind` explicitly from the source columns where possible rather
-        than relying on classify_v1_id(), which cannot tell an L13 hash from an
-        L20 hash. Yield rows with wkt=None rather than skipping them -- the
-        pipeline counts and quarantines them, and that count is a finding.
-        """
-        raise NotImplementedError("M2: implement against the AR1 schema")
+                    wkt = geo_data.get('wkt') if isinstance(geo_data, dict) else None
+                    l13_tokens = geo_data.get('13') if isinstance(geo_data, dict) else None
+                    
+                    v1_l13_geo_id = None
+                    v1_kind = KIND_UNKNOWN
+                    
+                    if issued_id and len(issued_id) == 36 and issued_id.count("-") == 4:
+                        v1_kind = KIND_UUID
+                        
+                    if l13_tokens and isinstance(l13_tokens, list):
+                        m = hashlib.sha256()
+                        for s in l13_tokens:
+                            m.update(s.encode())
+                        v1_l13_geo_id = m.hexdigest()
+                        
+                        if v1_kind != KIND_UUID:
+                            if issued_id == v1_l13_geo_id:
+                                v1_kind = KIND_L13
+                            elif issued_id:
+                                v1_kind = KIND_L20
+
+                    yield LegacyField(
+                        v1_geo_id=issued_id,
+                        wkt=wkt,
+                        area_ha=None,
+                        country=country,
+                        created_at=created_at,
+                        v1_kind=v1_kind,
+                        v1_l13_geo_id=v1_l13_geo_id
+                    )
 
     def iter_profiles(self, limit: int | None = None) -> Iterator[LegacyProfile]:
-        """Stream TerraPipe profiles with their attached v1 GeoIDs."""
-        raise NotImplementedError("M2: implement against the TerraPipe schema")
+        from psycopg2.extras import DictCursor
+        
+        query = """
+            SELECT u.id, u.email, u.phone_num, u.created_at, array_agg(f.geo_id) as geo_ids
+            FROM users u
+            LEFT JOIN users_fields uf ON u.id = uf.user_id
+            LEFT JOIN fields f ON uf.field_id = f.id
+            GROUP BY u.id
+        """
+        if limit is not None:
+            query += f" LIMIT {limit}"
+            
+        with self._get_tp_conn() as conn:
+            with conn.cursor(cursor_factory=DictCursor) as cur:
+                cur.execute(query)
+                for row in cur:
+                    gids = row['geo_ids']
+                    v1_geo_ids = [g for g in gids if g is not None] if gids else []
+                    
+                    yield LegacyProfile(
+                        source_key=str(row['id']),
+                        email=row['email'],
+                        phone=row['phone_num'],
+                        first_name="Unknown",
+                        last_name="Unknown",
+                        created_at=row['created_at'],
+                        v1_geo_ids=v1_geo_ids
+                    )
+
+    def inventory(self) -> Inventory:
+        from shapely.wkt import loads as load_wkt
+
+        inv = Inventory()
+        known = set()
+        fields = []
+        for f in self.iter_fields():
+            fields.append(f)
+            inv.total_fields += 1
+            inv.kind_counts[f.v1_kind] = inv.kind_counts.get(f.v1_kind, 0) + 1
+            if f.blocking_key:
+                known.add(f.blocking_key)
+            if f.has_geometry:
+                inv.with_geometry += 1
+                try:
+                    geom = load_wkt(f.wkt)
+                    inv.parseable_geometry += 1
+                    if geom.is_empty or geom.area <= 0:
+                        inv.zero_or_invalid_area += 1
+                except Exception:
+                    pass
+            band = _area_band(f.area_ha)
+            inv.area_bands[band] = inv.area_bands.get(band, 0) + 1
+
+        inv.distinct_l13_geo_ids = len(known)
+
+        claimed: dict[str, set[str]] = {}
+        emails: dict[str, int] = {}
+        phones: dict[str, int] = {}
+        
+        exact_known = {f.v1_geo_id for f in fields}
+        
+        for p in self.iter_profiles():
+            inv.total_profiles += 1
+            if p.v1_geo_ids:
+                inv.profiles_with_fields += 1
+            inv.max_fields_per_profile = max(inv.max_fields_per_profile, len(p.v1_geo_ids))
+            
+            if not p.email:
+                inv.profiles_missing_email += 1
+            else:
+                emails[p.email] = emails.get(p.email, 0) + 1
+                
+            if not p.phone:
+                inv.profiles_missing_phone += 1
+            else:
+                phones[p.phone] = phones.get(p.phone, 0) + 1
+                
+            for gid in p.v1_geo_ids:
+                if gid not in exact_known:
+                    inv.orphan_profile_refs += 1
+                claimed.setdefault(gid, set()).add(p.source_key)
+
+        inv.duplicate_emails = sum(1 for c in emails.values() if c > 1)
+        inv.duplicate_phones = sum(1 for c in phones.values() if c > 1)
+        inv.unclaimed_fields = len(exact_known - set(claimed.keys()))
+        inv.multi_owner_geo_ids = sum(1 for owners in claimed.values() if len(owners) > 1)
+        
+        return inv
 
 
 # --------------------------------------------------------------------------

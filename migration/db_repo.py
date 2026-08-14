@@ -18,13 +18,14 @@ from sqlalchemy.orm import Session
 
 from .models import (
     FieldList,
-    FieldListMember,
     GeoID,
     GeoIDBlockingCell,
     GeoIDParentEdge,
     GeoIDRegimeAlias,
     HubUser,
     ImportCheckpoint,
+    ListArtifact,
+    ListMemberEdge,
     PancakeUser,
 )
 from .repo import (
@@ -226,10 +227,18 @@ class SqlAlchemyRepo:
 
         fl = FieldList(list_id=row.list_id, name=row.name, owner_id=owner.id)
         self.pancake.add(fl)
-        self.pancake.flush()
-        self.pancake.add_all([
-            FieldListMember(fieldlist_id=fl.id, geoid=g) for g in row.geoids
-        ])
+        
+        la = self.ar2.scalar(
+            select(ListArtifact).where(ListArtifact.list_id == row.list_id)
+        )
+        if la is None:
+            la = ListArtifact(list_id=row.list_id)
+            self.ar2.add(la)
+            self.ar2.add_all([
+                ListMemberEdge(list_id=row.list_id, geoid=g) for g in set(row.geoids)
+            ])
+            self.ar2.flush()
+        
         self.pancake.flush()
 
     # -- checkpointing ---------------------------------------------------
@@ -260,24 +269,43 @@ class SqlAlchemyRepo:
     # -- introspection for reports --------------------------------------
 
     def owners_of(self, geo_id: str) -> set[str]:
+        list_ids = self.ar2.scalars(
+            select(ListMemberEdge.list_id)
+            .where(ListMemberEdge.geoid == geo_id)
+        ).all()
+        if not list_ids:
+            return set()
+            
         rows = self.pancake.execute(
             select(PancakeUser.hub_account_id)
             .join(FieldList, FieldList.owner_id == PancakeUser.id)
-            .join(FieldListMember, FieldListMember.fieldlist_id == FieldList.id)
-            .where(FieldListMember.geoid == geo_id)
+            .where(FieldList.list_id.in_(list_ids))
             .distinct()
         ).all()
         return {r[0] for r in rows}
 
     def multi_owner_geoids(self) -> dict[str, set[str]]:
-        rows = self.pancake.execute(
-            select(FieldListMember.geoid, PancakeUser.hub_account_id)
-            .join(FieldList, FieldListMember.fieldlist_id == FieldList.id)
-            .join(PancakeUser, FieldList.owner_id == PancakeUser.id)
+        edges = self.ar2.execute(
+            select(ListMemberEdge.geoid, ListMemberEdge.list_id)
         ).all()
+        list_ids = {e.list_id for e in edges}
+        
+        if not list_ids:
+            return {}
+            
+        owners = self.pancake.execute(
+            select(FieldList.list_id, PancakeUser.hub_account_id)
+            .join(PancakeUser, FieldList.owner_id == PancakeUser.id)
+            .where(FieldList.list_id.in_(list_ids))
+        ).all()
+        list_owners = {}
+        for lid, acc in owners:
+            list_owners.setdefault(lid, set()).add(acc)
+            
         by_geo: dict[str, set[str]] = {}
-        for geo_id, account in rows:
-            by_geo.setdefault(geo_id, set()).add(account)
+        for geo_id, list_id in edges:
+            for acc in list_owners.get(list_id, set()):
+                by_geo.setdefault(geo_id, set()).add(acc)
         return {g: o for g, o in by_geo.items() if len(o) > 1}
 
     @property

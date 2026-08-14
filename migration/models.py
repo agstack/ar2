@@ -133,6 +133,25 @@ class GeoIDParentEdge(Base):
     created_at = Column(DateTime, default=utcnow)
 
 
+class ListArtifact(Base):
+    __tablename__ = 'list_artifact'
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    list_id = Column(String(64), unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class ListMemberEdge(Base):
+    __tablename__ = 'listmember_edge'
+    __table_args__ = (
+        UniqueConstraint('geoid', 'list_id', name='uix_listmember_edge_geoid_listid'),
+    )
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    geoid = Column(String, index=True, nullable=False)
+    list_id = Column(String(64), ForeignKey('list_artifact.list_id', ondelete='CASCADE'), index=True, nullable=False)
+
+
 # --------------------------------------------------------------------------
 # ar2-hub accounts
 # --------------------------------------------------------------------------
@@ -157,6 +176,8 @@ class HubUser(Base):
     client_secret_hash = Column(String(255), nullable=True)
     registration_date = Column(DateTime, default=utcnow)
     is_active = Column(Boolean, default=False)
+    country = Column(String(2), nullable=True)
+    role = Column(String(20), default="user", nullable=False)
 
 
 # --------------------------------------------------------------------------
@@ -186,15 +207,6 @@ class FieldList(PancakeBase):
     name = Column(String(256))
     owner_id = Column(Integer, ForeignKey("users.id"), index=True)
     created_at = Column(DateTime, default=utcnow)
-
-
-class FieldListMember(PancakeBase):
-    __tablename__ = "fieldlist_members"
-    __table_args__ = (UniqueConstraint("fieldlist_id", "geoid", name="uq_member"),)
-
-    id = Column(Integer, primary_key=True)
-    fieldlist_id = Column(Integer, ForeignKey("fieldlists.id"), index=True)
-    geoid = Column(String(128), index=True)
 
 
 class ImportCheckpoint(PancakeBase):
