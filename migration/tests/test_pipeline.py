@@ -18,8 +18,8 @@ from migration.pipeline import (
     QUARANTINE_NO_GEOMETRY,
     QUARANTINE_UNUSABLE,
     OutOfOrder,
-    import_profiles,
     import_fields,
+    import_profiles,
 )
 from migration.repo import InMemoryRepo
 from migration.sources import FixtureSource
