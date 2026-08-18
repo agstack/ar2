@@ -24,7 +24,6 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import (
     ARRAY,
     JSON,
@@ -41,6 +40,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase
 
 
