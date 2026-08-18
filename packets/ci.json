@@ -1,0 +1,51 @@
+{
+  "$stomata_artifact": "review_packet",
+  "schema_version": "1.0.0",
+  "title": "Add CI Workflow",
+  "author": "Rajat",
+  "reviewer": "Sumer",
+  "produced_at": "2026-08-18T04:31:33+00:00",
+  "change": {
+    "summary": "Add GitHub Actions workflow for Stomata harness to run CI checks.",
+    "commits": [
+      "b3c55ed1421b47cf450f6c5c6cebc70086f8f610"
+    ],
+    "paths": []
+  },
+  "evidence": [
+    {
+      "type": "harness_state",
+      "claim": "Harness run at 2026-08-18T04:26:57+00:00: ar2 119/119, migration 85/85; all checks passed.",
+      "pointer": {
+        "path": "packets/ci.run.json",
+        "command": "harness/bin/stomata run --full",
+        "commit": "b3c55ed1421b47cf450f6c5c6cebc70086f8f610"
+      },
+      "captured_at": "2026-08-18T04:26:57+00:00"
+    },
+    {
+      "type": "ci_run",
+      "claim": "CI run completed successfully (AR2 + Hub + Pancake checkouts). See GitHub Actions.",
+      "pointer": {
+        "url": "https://github.com/agstack/ar2/actions/runs/PLACEHOLDER",
+        "ci_run": "PLACEHOLDER",
+        "jobs": [
+          "ar2",
+          "hub",
+          "pancake"
+        ]
+      },
+      "captured_at": "2026-08-18T04:31:33+00:00"
+    }
+  ],
+  "gaps": [],
+  "decision": {
+    "question": "Is the CI setup correct and passing?",
+    "options": [
+      "merge as is",
+      "change X first"
+    ],
+    "recommendation": "merge as is",
+    "requested_of": "Sumer"
+  }
+}
