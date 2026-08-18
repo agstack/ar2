@@ -24,7 +24,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import (
+    ARRAY,
     JSON,
     Boolean,
     Column,
@@ -66,8 +68,8 @@ class GeoID(Base):
     boundary_type = Column(String)
     area_ha_approx = Column(Float)
     s2_level = Column(Integer)
-    s2_cells = Column(JSON)
-    geo_data = Column(JSON)
+    s2_cells = Column(ARRAY(String).with_variant(JSON(), "sqlite"))
+    geo_data = Column(JSONB().with_variant(JSON(), "sqlite"))
     crop = Column(String)
     mask_level = Column(String, default="L0")
     created_at = Column(DateTime, default=utcnow)
