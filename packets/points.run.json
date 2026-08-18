@@ -1,10 +1,10 @@
 {
   "$stomata_artifact": "state",
   "stomata_version": "1.0.0",
-  "started_at": "2026-08-18T17:21:08+00:00",
-  "finished_at": "2026-08-18T17:22:00+00:00",
+  "started_at": "2026-08-18T17:23:16+00:00",
+  "finished_at": "2026-08-18T17:23:57+00:00",
   "git": {
-    "commit": "8fe50ffa7ec85715afd9810fc74cda3ae2d0c6c6",
+    "commit": "ffdc22a3207f49dbd1ad5f293eca225acf4946a3",
     "branch": "sumer/import-points",
     "dirty": false,
     "dirty_files": []
@@ -349,7 +349,7 @@
       "letter": "H",
       "name": "commit binding",
       "status": "pass",
-      "detail": "8fe50ffa7 on sumer/import-points, tree clean",
+      "detail": "ffdc22a32 on sumer/import-points, tree clean",
       "findings": []
     },
     {
