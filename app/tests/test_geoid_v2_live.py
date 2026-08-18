@@ -36,13 +36,17 @@ TESTKIT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "testkit/d
 os.environ["AR_TRUSTED_ISSUER_PUBKEY"] = os.path.join(TESTKIT_DIR, "dev_issuer_public.pem")
 os.environ["AR_TRUSTED_AUTHORITY_PUBKEY"] = os.path.join(TESTKIT_DIR, "authority_issuer_public.pem")
 
-from app import geoid_v2  # noqa: E402
-from app.auth import require_hub_user  # noqa: E402
-from app.database import SessionLocal  # noqa: E402
-from app.main import app  # noqa: E402
-from app.models.geo_id_model import GeoID, GeoIDRegimeAlias, ListMemberEdge  # noqa: E402
-from app.s2_services import S2Service  # noqa: E402
-from app.utils import Utils  # noqa: E402
+from app import geoid_v2
+from app.auth import require_hub_user
+from app.database import SessionLocal
+from app.main import app
+from app.models.geo_id_model import (
+    GeoID,
+    GeoIDRegimeAlias,
+    ListMemberEdge,
+)
+from app.s2_services import S2Service
+from app.utils import Utils
 
 app.dependency_overrides[require_hub_user] = lambda: {
     "sub": "test@demo.com", "capabilities": ["trace-forward"]

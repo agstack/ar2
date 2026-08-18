@@ -10,7 +10,6 @@ import asyncio
 import json
 import random
 import time
-import uuid
 from typing import Any
 
 from fastapi import (

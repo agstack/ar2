@@ -107,11 +107,11 @@ def meal():
         yield packets
 
 
-from app.auth import require_hub_user  # noqa: E402
-from app.database import SessionLocal  # noqa: E402
-from app.main import app  # noqa: E402
-from app.merkle import canonical_members, merkle_root  # noqa: E402
-from app.models.geo_id_model import GeoID  # noqa: E402
+from app.auth import require_hub_user
+from app.database import SessionLocal
+from app.main import app
+from app.merkle import canonical_members, merkle_root
+from app.models.geo_id_model import GeoID
 
 app.dependency_overrides[require_hub_user] = lambda: {
     "sub": "investigator@fda.test",
