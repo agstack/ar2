@@ -31,61 +31,37 @@ M1 — SOURCE INVENTORY
   v1 GeoIDs claimed by >1 profile                      373
 
 ==============================================================================
-M2 — ADVERSARIAL SAMPLE
-==============================================================================
-sample of 3000 fields and 313 profiles (budget 3000)
-
-selected for these hazards:
-  area_unknown                    200
-  l13_collision_cluster           200
-  l20_fallback                    200
-  multi_owner_cluster             200
-  profile_with_many_fields        200
-  profile_with_orphan_ref         200
-  unclaimed_field                 200
-  zero_or_missing_area            200
-  proportional filler            2008
-
-orphan_refs (reported, not selectable): 1115
-
-strata with NO members in the source (verify this is real,
-not a query bug):
-  uuid_fallback
-  no_geometry
-  unparseable_geometry
-
-==============================================================================
 M3 — FIELD IMPORT (AR 1.0 -> AR2, v2 GeoIDs at ingest)
 ==============================================================================
-  considered                                         3,000
-  imported new                                         428
-      of which nested (child_of)                          25
-  resolved same_as (merged)                              7
-  skipped, already imported                          1,144
+  considered                                        28,282
+  imported new                                      13,658
+      of which nested (child_of)                         310
+  resolved same_as (merged)                             30
+  skipped, already imported                              0
   UUID -> content-derived identity                       0
-  canonicalization altered geometry                    424
-  quarantined                                        1,421
-      unusable_geometry                                1,421
-  seconds / 1k fields                                10.04
+  canonicalization altered geometry                  3,597
+  quarantined                                       14,594
+      unusable_geometry                               14,594
+  seconds / 1k fields                                55.56
 
 ==============================================================================
 M4 — PROFILE IMPORT (TerraPipe -> Hub + Pancake)
 ==============================================================================
-  considered                                           313
-  accounts created                                     247
-  field lists created                                   10
-  associations mapped                                2,820
-  accounts rejected                                     66
+  considered                                           345
+  accounts created                                     260
+  field lists created                                   22
+  associations mapped                               12,036
+  accounts rejected                                     85
       phone NOT NULL                                       8
         e.g. 6208686e-a2fc-4cc2-8a3a-30c8b815e1a4: tp:6208686e-a2fc-4cc2-8a3a-30c8b815e1a4
         e.g. 00269e50-c70e-4a67-ae3e-6d1d7839d0f6: tp:00269e50-c70e-4a67-ae3e-6d1d7839d0f6
         e.g. 319b9df0-9c19-463a-9358-d4583861524a: tp:319b9df0-9c19-463a-9358-d4583861524a
-      phone UNIQUE                                        58
+      phone UNIQUE                                        77
         e.g. aff5ae6a-7795-40af-b19e-60fa8bd65bb0: 9876543210 already held by tp:99cc437f-4052-4f15-8250-80c77ddd5384
+        e.g. 17b72b41-a9fd-40cb-ad4a-72fa300c975a: 8580704078 already held by tp:fc7f9b4a-4af4-4901-b284-b73b8cebb46a
         e.g. ceaa697b-17a5-4039-8cb1-18a1d72e84f4: 9876543210 already held by tp:99cc437f-4052-4f15-8250-80c77ddd5384
-        e.g. 60faeae4-5eca-4ebf-86ea-1a3a246da985: 9876543210 already held by tp:99cc437f-4052-4f15-8250-80c77ddd5384
-  join failures                                     23,395
-      v1_not_in_alias_table                           23,395
+  join failures                                     14,229
+      v1_not_in_alias_table                           14,229
         e.g. 26114e34-ee9d-42c6-ace6-9d18b45fc1a8 -> 4f023b6d2894dfc18e20ea7668a7604934dfb3f36881b9b3a659b100beef915c
         e.g. 26114e34-ee9d-42c6-ace6-9d18b45fc1a8 -> 41201451aa582ba91504d92f1853818814c986e32bd731776aa41fadc29f92ca
         e.g. 26114e34-ee9d-42c6-ace6-9d18b45fc1a8 -> 09b4be144e29f27b6316e86b98dc0b44d89b06eb8c239edfe4a55bd6cd779274
@@ -93,22 +69,23 @@ M4 — PROFILE IMPORT (TerraPipe -> Hub + Pancake)
 ==============================================================================
 M6 — SHARED OWNERSHIP AFTER MERGE  (review by hand)
 ==============================================================================
-  4 v2 GeoID(s) owned by more than one account.
+  5 v2 GeoID(s) owned by more than one account.
 
   Legal in the data model: the registry records no ownership, so
   multiple grants over one GeoID are valid. But each of these means
   one user can see another user's field data. Inspect them.
 
-    f689671f208c4e131fc27933...  <- tp:80fe713e-03cd-4b37-9307-bbadd96dde1a, tp:e1200c06-4534-4654-8dcc-a167caba4a04
+    f689671f208c4e131fc27933...  <- tp:80fe713e-03cd-4b37-9307-bbadd96dde1a, tp:b0ef92f3-ccf0-43ff-8e6a-d57d6084126b, tp:e1200c06-4534-4654-8dcc-a167caba4a04
     335f3ec6771d5975479b58a1...  <- tp:b3c78f36-e57b-4cca-991e-17923e5d423d, tp:d16de02e-b8ec-46b5-95bb-df9d027cd144
-    32d85bbd9d24ba0414c32d70...  <- tp:d16de02e-b8ec-46b5-95bb-df9d027cd144, tp:ed67203c-1bd6-4560-9864-6cd388bb1fbe
     a5862d27d6ec47b29cb4b785...  <- tp:8159ea4e-47a8-47ee-8da3-66def150b75d, tp:d16de02e-b8ec-46b5-95bb-df9d027cd144, tp:ed67203c-1bd6-4560-9864-6cd388bb1fbe
+    32d85bbd9d24ba0414c32d70...  <- tp:d16de02e-b8ec-46b5-95bb-df9d027cd144, tp:ed67203c-1bd6-4560-9864-6cd388bb1fbe
+    55c45218f42ec36e5b40d76a...  <- tp:b0ef92f3-ccf0-43ff-8e6a-d57d6084126b, tp:e1200c06-4534-4654-8dcc-a167caba4a04
 
 ==============================================================================
 DECISIONS REQUIRED
 ==============================================================================
   1. 20,171 AR1 L13 collisions — establish what AR 1.0 did on collision: fail, or return the existing record?
-  2. 1,421 fields quarantined — policy needed (quarantine / flag / reject).
-  3. 4 merged GeoID(s) with multiple owners — inspect by hand and set a policy.
-  4. 66 accounts rejected on hub constraints — decide how to admit them.
-  5. 23395 associations failed to join — each one is a user who will not see one of their fields.
+  2. 14,594 fields quarantined — policy needed (quarantine / flag / reject).
+  3. 5 merged GeoID(s) with multiple owners — inspect by hand and set a policy.
+  4. 85 accounts rejected on hub constraints — decide how to admit them.
+  5. 14229 associations failed to join — each one is a user who will not see one of their fields.
