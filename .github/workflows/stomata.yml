@@ -51,7 +51,6 @@ jobs:
           path: .sibling/ar2-hub
           token: ${{ secrets.AGSTACK_PAT }}
           ref: main
-        continue-on-error: true
 
       - name: Check out pancake
         uses: actions/checkout@v4
@@ -60,7 +59,6 @@ jobs:
           path: .sibling/pancake
           token: ${{ secrets.AGSTACK_PAT }}
           ref: main
-        continue-on-error: true
 
       - uses: actions/setup-python@v5
         with:
