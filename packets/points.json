@@ -1,0 +1,70 @@
+{
+  "$stomata_artifact": "review_packet",
+  "schema_version": "1.0.0",
+  "title": "Import point registrations instead of quarantining half the registry",
+  "author": "Sumer",
+  "reviewer": "Rajat",
+  "produced_at": "2026-08-18T17:22:10+00:00",
+  "change": {
+    "summary": "The first full run against live AR 1.0 quarantined 14,594 of 28,282 fields (51.6%) under one reason, unusable_geometry, and 14,229 of 26,265 user-to-field associations then failed to join, because a quarantined field never enters the alias table the join reads. The cause was a missing code path, not the data: AR 1.0 accepted point registrations, a pin has no area so the polygon coverer cannot describe one, and migration/geoid_v2.py was ported as polygon-only while app/geoid_v2.py has handled points all along. This adds the point path to the importer, makes quarantine reasons specific enough to act on, derives area from the boundary so the inventory bands mean something, stops the test suite dirtying its own tree on every run, and pins ruff so the lint ratchet measures the same way twice.",
+    "commits": [
+      "8fe50ffa7ec85715afd9810fc74cda3ae2d0c6c6"
+    ],
+    "paths": [
+      "migration/geoid_v2.py",
+      "migration/pipeline.py",
+      "migration/sources.py",
+      "migration/tests/test_points_are_importable.py",
+      "migration/tests/test_pipeline.py",
+      "app/tests/testkit/mint_test_authority_credentials.py",
+      ".stomata/baseline.json",
+      "stomata.json",
+      ".github/workflows/ci.yml",
+      "harness"
+    ]
+  },
+  "evidence": [
+    {
+      "type": "harness_state",
+      "claim": "Harness run at 2026-08-18T17:22:00+00:00: ar2 119/119, migration 92/96; all checks passed.",
+      "pointer": {
+        "path": "packets/points.run.json",
+        "command": "harness/bin/stomata run --full",
+        "commit": "8fe50ffa7ec85715afd9810fc74cda3ae2d0c6c6"
+      },
+      "captured_at": "2026-08-18T17:22:00+00:00"
+    },
+    {
+      "type": "test_output",
+      "claim": "migration/tests/test_points_are_importable.py, 10 tests. Reverting the one line that dispatches to the point path fails 5 of them, so they detect the live defect rather than describing the fix. It also asserts the importer and the live registration agree on point identity at four positions: if they diverge, importing a pin AR2 already holds silently creates a second identifier for one place.",
+      "pointer": {
+        "path": "migration/tests/test_points_are_importable.py",
+        "command": "pytest migration/tests/test_points_are_importable.py -q"
+      },
+      "captured_at": "2026-08-18T17:22:10+00:00"
+    }
+  ],
+  "gaps": [
+    {
+      "kind": "not_covered",
+      "description": "Not run against live AR 1.0 -- I have no access. The fix is proven on fixtures covering every shape AR 1.0 is known to have used for a pin. The number that matters is how far the quarantine count falls on the real registry, and only a rerun there can produce it."
+    },
+    {
+      "kind": "unknown",
+      "description": "The residual quarantine after this fix is unknown. Reasons are now broken out per fault, so the rerun reports what is left and why instead of one opaque bucket. Whether any of it needs a policy can only be judged from that breakdown."
+    },
+    {
+      "kind": "not_covered",
+      "description": "The 5 shared-ownership GeoIDs and the 85 rejected hub accounts are untouched here. Both are genuine policy questions and both are answered in the review document; neither is affected by this change."
+    }
+  ],
+  "decision": {
+    "question": "Rerun the import against live AR 1.0 with this branch and report the new quarantine count, its per-reason breakdown, and the new association join rate?",
+    "options": [
+      "rerun and report",
+      "review the code first, then rerun"
+    ],
+    "recommendation": "rerun and report",
+    "requested_of": "Rajat"
+  }
+}

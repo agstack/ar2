@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
+from . import geoid_v2
+
 # v1 identifier kinds. Which one a field got depended on registration order,
 # which is the defect v2 removes. UUID is the least trustworthy.
 KIND_L13 = "l13_hash"
@@ -205,7 +207,12 @@ class Ar1TerraPipeSource:
                     yield LegacyField(
                         v1_geo_id=issued_id,
                         wkt=wkt,
-                        area_ha=None,
+                        # Derived from the boundary, not read from AR 1.0. The
+                        # legacy schema exposes no area this adapter can trust,
+                        # and with every row reporting None the inventory bands
+                        # collapse to a single "unknown" bucket that describes
+                        # the registry not at all.
+                        area_ha=geoid_v2.area_ha(wkt) if wkt else None,
                         country=country,
                         created_at=created_at,
                         v1_kind=v1_kind,
@@ -419,11 +426,21 @@ class FixtureSource:
         self.no_geom = self._hash_id()
         self._add(self.no_geom, None, None, KIND_L13, country="KEN")
 
+        # A line between two distinct positions: no area to cover and no single
+        # position to pin, so there is nothing to identify it by.
         self.bad_geom = self._hash_id()
-        self._add(self.bad_geom, "POLYGON ((0 0, 0 0, 0 0, 0 0))", 0.0, KIND_L13, country="KEN")
+        self._add(self.bad_geom, "LINESTRING (0 0, 0.001 0.001)", 0.0, KIND_L13, country="KEN")
 
         self.unparseable = self._hash_id()
         self._add(self.unparseable, "NOT WKT AT ALL", None, KIND_UNKNOWN, country="KEN")
+
+        # A pin, written as a ring whose vertices coincide -- one of the ways
+        # AR 1.0 stored point registrations. It looks degenerate and is not: it
+        # is a position, and a position is identifiable. Treating this shape as
+        # broken is what quarantined half the live registry.
+        self.pin_as_ring = self._hash_id()
+        self._add(self.pin_as_ring, "POLYGON ((36.8 -1.29, 36.8 -1.29, 36.8 -1.29, 36.8 -1.29))",
+                  None, KIND_L13, country="KEN")
 
         # --- shapes the first implementation got wrong -----------------------
         self.holed = self._hash_id()

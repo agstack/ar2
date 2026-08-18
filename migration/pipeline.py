@@ -49,10 +49,29 @@ QUARANTINE_DUPLICATE_CONTENT = "duplicate_content_hash"
 QUARANTINE_CONSTRAINT = "constraint_violation"
 
 
+def _reason_of(exc: Exception) -> str:
+    """A short, groupable reason for a rejected geometry.
+
+    Quarantine counts are only useful if they can be acted on, and "14,594
+    unusable" supports no action at all. Broken down, the same number becomes a
+    work list: one reason may be a missing code path, another a genuinely
+    corrupt row, and they need opposite responses.
+    """
+    text = str(exc).strip() or exc.__class__.__name__
+    # Trim the specifics so the same fault groups: "no polygonal component in
+    # LineString" and "... in Point" are one reason with two shapes, and the
+    # shape is what the message ends with.
+    return text.split(":")[0][:60]
+
+
 @dataclass
 class FieldReport:
     considered: int = 0
     imported_new: int = 0
+    # Of imported_new, how many were pins rather than boundaries. Reported
+    # separately because a registry that is half points is a different thing to
+    # plan around than one that is all fields, and the total hides that.
+    imported_points: int = 0
     resolved_same_as: int = 0
     resolved_child_of: int = 0
     skipped_already_done: int = 0
@@ -117,15 +136,32 @@ def import_fields(
             report.quarantine(QUARANTINE_NO_GEOMETRY, legacy.v1_geo_id)
             continue
 
-        try:
-            tokens, v2_geo_id = g2.geo_id_with_tokens(legacy.wkt)
-            content_hash = g2.content_hash(legacy.wkt)
-        except Exception:  # noqa: BLE001
-            # Covers GeometryUnusable and any shapely/WKT parse failure. A field
-            # whose geometry cannot be re-derived cannot be re-identified, so it
-            # is quarantined rather than given a surrogate key.
-            report.quarantine(QUARANTINE_UNUSABLE, legacy.v1_geo_id)
-            continue
+        # A pin, however it was written. AR 1.0 accepted point registrations and
+        # stored some of them as collapsed rings, and the polygon coverer cannot
+        # describe a point -- it has no area. Without this branch every one of
+        # them is rejected as unusable geometry, which is not a data quality
+        # problem to write a policy about but a missing code path. AR2's own
+        # registration has always handled points; only the importer did not.
+        position = g2.point_coords(legacy.wkt)
+        if position is not None:
+            lat, lng = position
+            tokens, v2_geo_id = g2.point_geo_id_with_tokens(lat, lng)
+            content_hash = g2.point_content_hash(lat, lng)
+            report.imported_points += 1
+        else:
+            try:
+                tokens, v2_geo_id = g2.geo_id_with_tokens(legacy.wkt)
+                content_hash = g2.content_hash(legacy.wkt)
+            except Exception as exc:  # noqa: BLE001
+                # A field whose geometry cannot be re-derived cannot be
+                # re-identified, so it is quarantined rather than given a
+                # surrogate key. The reason is recorded: one undifferentiated
+                # bucket tells whoever reads the report how many are broken and
+                # nothing whatever about what to do, which is the difference
+                # between a finding and an actionable one.
+                report.quarantine(
+                    f"{QUARANTINE_UNUSABLE}:{_reason_of(exc)}", legacy.v1_geo_id)
+                continue
 
         if _canonicalization_altered(legacy.wkt):
             report.canonicalization_changed.append(legacy.v1_geo_id)

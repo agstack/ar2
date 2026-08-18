@@ -1,11 +1,24 @@
 {
-  "$stomata_artifact": "baseline",
-  "captured_at": "2026-08-14T18:11:16+00:00",
-  "commit": "4ecdd0ffbb52e181b6a91ef341a5d7588f970944",
-  "dirty_when_captured": false,
-  "suites": {
-    "ar2": {
+  "$stomata_artifact": "state",
+  "stomata_version": "1.0.0",
+  "started_at": "2026-08-18T17:21:08+00:00",
+  "finished_at": "2026-08-18T17:22:00+00:00",
+  "git": {
+    "commit": "8fe50ffa7ec85715afd9810fc74cda3ae2d0c6c6",
+    "branch": "sumer/import-points",
+    "dirty": false,
+    "dirty_files": []
+  },
+  "invocation": "harness/bin/stomata run --full",
+  "suites": [
+    {
+      "name": "ar2",
+      "command": "/tmp/ar2venv/bin/python -m pytest app/tests -q -rs",
+      "returncode": 0,
       "passed": 119,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0,
       "total": 119,
       "test_ids": [
         "app/tests/test_api.py::test_eudr_export",
@@ -126,11 +139,19 @@
         "app/tests/test_traceforward.py::test_region_built_from_nested_list",
         "app/tests/test_traceforward.py::test_region_normalization_determinism_and_wkt",
         "app/tests/test_traceforward.py::test_three_list_reverse_lookup"
-      ]
+      ],
+      "skip_reasons": [],
+      "collect_ok": true
     },
-    "migration": {
-      "passed": 81,
-      "total": 85,
+    {
+      "name": "migration",
+      "command": "/tmp/ar2venv/bin/python -m pytest migration/tests -q -rs",
+      "returncode": 0,
+      "passed": 92,
+      "failed": 0,
+      "skipped": 4,
+      "errors": 0,
+      "total": 96,
       "test_ids": [
         "migration/tests/test_db_repo.py::test_alias_is_persisted_and_resolves",
         "migration/tests/test_db_repo.py::test_alias_re_upsert_is_idempotent_but_remap_is_refused",
@@ -159,6 +180,7 @@
         "migration/tests/test_limit_invalidates_joins.py::test_the_runner_warns_when_limit_is_set",
         "migration/tests/test_limit_invalidates_joins.py::test_the_warning_names_the_three_unreadable_figures",
         "migration/tests/test_limit_invalidates_joins.py::test_unlimited_run_has_only_the_deliberate_join_failures",
+        "migration/tests/test_pipeline.py::test_a_pin_written_as_a_ring_imports",
         "migration/tests/test_pipeline.py::test_accounts_and_lists_created",
         "migration/tests/test_pipeline.py::test_dry_run_writes_nothing",
         "migration/tests/test_pipeline.py::test_exact_duplicate_geometry_aliases_rather_than_failing",
@@ -178,6 +200,16 @@
         "migration/tests/test_pipeline.py::test_uuid_fields_gain_content_derived_identity",
         "migration/tests/test_pipeline.py::test_v1_identifiers_resolve_forever",
         "migration/tests/test_pipeline.py::testfields_imported_and_aliased",
+        "migration/tests/test_points_are_importable.py::test_a_pin_and_a_field_are_not_confused",
+        "migration/tests/test_points_are_importable.py::test_a_pin_imports_however_ar1_wrote_it_down[LINESTRING(77.5 12.9, 77.5 12.9)]",
+        "migration/tests/test_points_are_importable.py::test_a_pin_imports_however_ar1_wrote_it_down[POINT(77.5 12.9)]",
+        "migration/tests/test_points_are_importable.py::test_a_pin_imports_however_ar1_wrote_it_down[POLYGON((77.5 12.9, 77.5 12.9, 77.5 12.9, 77.5 12.9))]",
+        "migration/tests/test_points_are_importable.py::test_a_pin_imports_rather_than_quarantining",
+        "migration/tests/test_points_are_importable.py::test_a_quarantine_reason_is_specific_enough_to_act_on",
+        "migration/tests/test_points_are_importable.py::test_area_is_derived_so_the_inventory_bands_mean_something",
+        "migration/tests/test_points_are_importable.py::test_every_spelling_of_one_pin_lands_on_one_identifier",
+        "migration/tests/test_points_are_importable.py::test_genuinely_broken_geometry_still_quarantines",
+        "migration/tests/test_points_are_importable.py::test_the_two_implementations_agree_on_points",
         "migration/tests/test_primitive.py::test_blocking_key_is_coarse_and_shared",
         "migration/tests/test_primitive.py::test_collision_fixed_neighbouring_fields_differ",
         "migration/tests/test_primitive.py::test_deterministic",
@@ -217,13 +249,116 @@
         "migration/tests/test_schema_drift.py::test_mirrored_columns_match_the_real_schema[pancake-fieldlists-PancakeBase]",
         "migration/tests/test_schema_drift.py::test_mirrored_columns_match_the_real_schema[pancake-users-PancakeBase]",
         "migration/tests/test_schema_drift.py::test_regime_alias_table_is_ours_and_not_ar2s"
-      ]
+      ],
+      "skip_reasons": [
+        {
+          "location": "migration/tests/test_schema_drift.py:106",
+          "reason": "hub checkout not present"
+        },
+        {
+          "location": "migration/tests/test_schema_drift.py:106",
+          "reason": "pancake checkout not present"
+        },
+        {
+          "location": "migration/tests/test_schema_drift.py:130",
+          "reason": "hub checkout not present"
+        }
+      ],
+      "collect_ok": true
     }
+  ],
+  "lint": {
+    "command": "/tmp/ar2venv/bin/python -m ruff check app migration --output-format concise",
+    "returncode": 1,
+    "violations": 36,
+    "sample": [
+      "\u001b[1mapp/auth.py\u001b[0m\u001b[36m:\u001b[0m32\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/database.py\u001b[0m\u001b[36m:\u001b[0m21\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/main.py\u001b[0m\u001b[36m:\u001b[0m16\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/main.py\u001b[0m\u001b[36m:\u001b[0m18\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/main.py\u001b[0m\u001b[36m:\u001b[0m19\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/models/geo_id_model.py\u001b[0m\u001b[36m:\u001b[0m16\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/models/geo_id_model.py\u001b[0m\u001b[36m:\u001b[0m27\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/models/geo_id_model.py\u001b[0m\u001b[36m:\u001b[0m29\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/models/geo_id_model.py\u001b[0m\u001b[36m:\u001b[0m132\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/routers/traceforward.py\u001b[0m\u001b[36m:\u001b[0m190\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/routers/traceforward.py\u001b[0m\u001b[36m:\u001b[0m443\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/tests/test_api.py\u001b[0m\u001b[36m:\u001b[0m19\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/tests/test_api.py\u001b[0m\u001b[36m:\u001b[0m22\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/tests/test_api.py\u001b[0m\u001b[36m:\u001b[0m23\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/tests/test_api.py\u001b[0m\u001b[36m:\u001b[0m24\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/tests/test_api.py\u001b[0m\u001b[36m:\u001b[0m25\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/tests/test_api.py\u001b[0m\u001b[36m:\u001b[0m26\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/tests/test_fsma204_traceability.py\u001b[0m\u001b[36m:\u001b[0m110\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/tests/test_fsma204_traceability.py\u001b[0m\u001b[36m:\u001b[0m111\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file",
+      "\u001b[1mapp/tests/test_fsma204_traceability.py\u001b[0m\u001b[36m:\u001b[0m112\u001b[36m:\u001b[0m1\u001b[36m:\u001b[0m \u001b[1;31mE402\u001b[0m Module level import not at top of file"
+    ],
+    "tool_version": null
   },
-  "lint_violations": 36,
-  "notes": [
-    "Reference point moved deliberately, in review, for two reasons. Neither is a test or a violation disappearing quietly, which is what this file exists to prevent.",
-    "1. test_degenerate_geometry_quarantined_not_invented was renamed to test_unidentifiable_geometry_quarantined_not_invented. Its fixture was POLYGON((0 0, 0 0, 0 0, 0 0)), asserted to be broken geometry. It is not broken: it is a point registration written as a ring, which AR 1.0 accepted and AR2 registers natively. Reading that shape as unusable quarantined 14,594 of 28,282 live fields. The test now uses a line between two distinct positions, which genuinely cannot be identified, and test_a_pin_written_as_a_ring_imports covers the shape it used to reject.",
-    "2. lint_violations moved 25 -> 36 with no change to any source file. The count was measured by an unpinned ruff, and the same tree reports 0 under the version CI happened to install and 36 under a newer one. ruff is now pinned in .github/workflows/ci.yml, so 36 is the honest count under the tool the ratchet actually uses. These are pre-existing E402 violations in app/; the ratchet holds them from rising."
-  ]
+  "checks": [
+    {
+      "letter": "A",
+      "name": "suites ran",
+      "status": "pass",
+      "detail": "2 suite(s), all collected and executed",
+      "findings": []
+    },
+    {
+      "letter": "B",
+      "name": "green",
+      "status": "pass",
+      "detail": "211 tests passed, none failed",
+      "findings": []
+    },
+    {
+      "letter": "C",
+      "name": "no regression",
+      "status": "pass",
+      "detail": "no tests lost; 11 new test(s) since baseline",
+      "findings": []
+    },
+    {
+      "letter": "D",
+      "name": "no silent skips",
+      "status": "pass",
+      "detail": "4 skip(s), all declared",
+      "findings": []
+    },
+    {
+      "letter": "E",
+      "name": "reachability",
+      "status": "pass",
+      "detail": "5 claim(s), all reachable from production code",
+      "findings": []
+    },
+    {
+      "letter": "F",
+      "name": "retired defects",
+      "status": "pass",
+      "detail": "3 pattern(s), none present",
+      "findings": []
+    },
+    {
+      "letter": "G",
+      "name": "lint ratchet",
+      "status": "pass",
+      "detail": "36 violation(s), unchanged",
+      "findings": []
+    },
+    {
+      "letter": "H",
+      "name": "commit binding",
+      "status": "pass",
+      "detail": "8fe50ffa7 on sumer/import-points, tree clean",
+      "findings": []
+    },
+    {
+      "letter": "I",
+      "name": "mutations",
+      "status": "pass",
+      "detail": "5 mutation(s) applied, every one detected",
+      "findings": []
+    }
+  ],
+  "outcome": "pass"
 }

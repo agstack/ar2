@@ -44,6 +44,7 @@ MIN_LEVEL = 1
 MAX_CELLS = 1_000_000    # effectively unbounded: never truncate, never approximate
 
 LEAF_LEVEL = 30
+_EARTH_RADIUS_M = 6_371_010.0   # IUGG mean radius, as used by S2Earth
 REGIME_VERSION = "v2"
 
 
@@ -180,6 +181,99 @@ def content_hash(wkt_string: str) -> str:
     from shapely import wkb
     geom = canonicalize(wkt_string)
     return hashlib.sha256(wkb.dumps(geom, output_dimension=2)).hexdigest()
+
+
+# --------------------------------------------------------------------------
+# points
+# --------------------------------------------------------------------------
+
+def point_geo_id_with_tokens(lat: float, lng: float) -> tuple[list[str], str]:
+    """Identity for a point: the single leaf cell containing it.
+
+    Byte-for-byte the same rule as app.geoid_v2.point_geo_id_with_tokens, and
+    test_the_two_implementations_agree_on_points fails if that stops being true.
+    A point registered through AR2's API and the same point arriving through the
+    legacy import have to land on one identifier, or the import manufactures a
+    second identity for a place that already has one.
+
+    Why this exists in the importer at all: AR 1.0 accepted point registrations,
+    and a great many of its rows are points rather than boundaries. The polygon
+    coverer cannot describe a point -- it has no area -- so without this path the
+    importer rejects every one of them as unusable geometry. That is not a data
+    quality problem to write a policy about, it is a missing code path.
+    """
+    cell = s2g.S2CellId(s2g.S2LatLng.FromDegrees(lat, lng))
+    tokens = [cell.ToToken()]
+    return tokens, hashlib.sha256(tokens[0].encode()).hexdigest()
+
+
+def point_content_hash(lat: float, lng: float) -> str:
+    """Content hash for a point, from its canonical WKB.
+
+    Rounded to COORD_PRECISION first, exactly as canonicalize() rounds a polygon,
+    so two submissions of the same pin within ~11 cm are one row rather than two.
+    """
+    from shapely import wkb
+    from shapely.geometry import Point
+    point = Point(round(lng, COORD_PRECISION), round(lat, COORD_PRECISION))
+    return hashlib.sha256(wkb.dumps(point, output_dimension=2)).hexdigest()
+
+
+def point_coords(wkt_string: str) -> tuple[float, float] | None:
+    """(lat, lng) if this WKT denotes a single position, else None.
+
+    Accepts a bare POINT, and also a polygon or line whose vertices are all the
+    same position -- AR 1.0 stored pins both ways, and a collapsed ring is a pin
+    written as a boundary rather than a broken boundary.
+    """
+    try:
+        geom = load_wkt(wkt_string)
+    except Exception:  # noqa: BLE001
+        return None
+    if geom.is_empty:
+        return None
+
+    # Dispatch on the type rather than probing for .coords: shapely defines the
+    # attribute on Polygon and raises when it is read, so getattr finds it and
+    # then blows up.
+    if geom.geom_type == "Polygon":
+        coords = list(geom.exterior.coords)
+    elif geom.geom_type in ("Point", "LineString", "LinearRing"):
+        coords = list(geom.coords)
+    else:
+        return None
+
+    if not coords:
+        return None
+
+    unique = {(round(c[0], COORD_PRECISION), round(c[1], COORD_PRECISION))
+              for c in coords}
+    if len(unique) != 1:
+        return None
+
+    lng, lat = next(iter(unique))
+    return lat, lng
+
+
+def area_ha(wkt_string: str) -> float | None:
+    """Geodesic area in hectares, or None if the geometry has no area.
+
+    Computed from the geometry rather than read from a legacy column. AR 1.0's
+    stored areas are of unknown provenance and cannot be checked from here,
+    whereas this is derived from the same boundary that produces the GeoID and
+    is therefore consistent with it by construction. Points return None: a pin
+    has no area, and reporting 0 would put pins in the same bucket as collapsed
+    boundaries, which are a different problem.
+
+    S2Polygon.GetArea returns steradians on the unit sphere; scaling by the
+    Earth's mean radius squared gives m2, and 1 ha is 10,000 m2. Exact on the
+    sphere, so no projection is chosen and none is wrong.
+    """
+    try:
+        geom = canonicalize(wkt_string)
+        return _s2_polygon(geom).GetArea() * _EARTH_RADIUS_M ** 2 / 10_000.0
+    except Exception:  # noqa: BLE001
+        return None
 
 
 # --------------------------------------------------------------------------

@@ -93,14 +93,37 @@ def test_uuid_fields_gain_content_derived_identity(imported, src):
         next(f.wkt for f in src.iter_fields() if f.v1_geo_id == src.uuid_field))
 
 
-def test_degenerate_geometry_quarantined_not_invented(imported, src):
+def test_unidentifiable_geometry_quarantined_not_invented(imported, src):
+    """Geometry with nothing to identify it by must not get a surrogate key.
+
+    Reasons are matched by prefix because each carries the specific fault after
+    a colon -- one bucket of "unusable" tells the reader how many rows failed and
+    nothing about what to do with them.
+    """
     repo, fields, _ = imported
     assert src.no_geom in fields.quarantined[QUARANTINE_NO_GEOMETRY]
-    unusable = fields.quarantined[QUARANTINE_UNUSABLE]
+
+    unusable = [v1 for reason, ids in fields.quarantined.items()
+                if reason.startswith(QUARANTINE_UNUSABLE) for v1 in ids]
     assert src.bad_geom in unusable and src.unparseable in unusable
-    # and they must NOT have received an identity
+
     for bad in (src.no_geom, src.bad_geom, src.unparseable):
         assert repo.resolve_v1(bad) is None
+
+
+def test_a_pin_written_as_a_ring_imports(imported, src):
+    """The 14,594 defect, held down at pipeline level.
+
+    A ring whose vertices coincide is a point registration, which AR 1.0
+    accepted and AR2 registers natively. Reading it as broken geometry rejected
+    51.6% of the live registry and, through the alias table the association join
+    reads, 54.2% of every user's field links with it.
+    """
+    repo, fields, _ = imported
+
+    assert repo.resolve_v1(src.pin_as_ring) is not None, \
+        "a point registration was quarantined instead of imported"
+    assert fields.imported_points >= 1
 
 
 def test_exact_duplicate_geometry_aliases_rather_than_failing(imported, src):
