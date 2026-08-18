@@ -91,6 +91,8 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ar2_test
           HUB_CHECKOUT: ${{ github.workspace }}/.sibling/ar2-hub
           PANCAKE_CHECKOUT: ${{ github.workspace }}/.sibling/pancake
+          MIGRATION_HUB_MODELS: ${{ github.workspace }}/.sibling/ar2-hub/user_models.py
+          MIGRATION_PANCAKE_MODELS: ${{ github.workspace }}/.sibling/pancake/services/pancake_services/grants/models.py
           STOMATA_PYTHON: python
           NO_COLOR: '1'
         run: harness/bin/stomata run --full
