@@ -39,6 +39,7 @@ jobs:
           # The harness is a pinned submodule. Without this it is absent and the
           # job fails on a missing file rather than on anything meaningful.
           submodules: true
+          token: ${{ secrets.AGSTACK_PAT }}
 
       # Sibling repositories that cross-layer tests compare against. Without
       # these, those tests SKIP -- and a skipped cross-layer test reports the
