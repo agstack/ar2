@@ -1,0 +1,37 @@
+{
+  "$stomata_artifact": "review_packet",
+  "schema_version": "1.0.0",
+  "title": "Threshold bias on corrected metric",
+  "author": "Rajat",
+  "reviewer": "Sumer",
+  "produced_at": "2026-08-18T06:16:59+00:00",
+  "change": {
+    "summary": "Re-measured the threshold bias using iou_and_containment instead of the old metric. The old metric dropped to 25-42% on a 50m offset for 200/400m squares, while the new exact metric tracks geometric IoU very closely (within 1% margin of error). No center-in-polygon correction is needed.",
+    "commits": [
+      "ac6e536703e5f51d24852ea08a832fbcfd349e8f"
+    ],
+    "paths": []
+  },
+  "evidence": [
+    {
+      "type": "harness_state",
+      "claim": "Harness run at 2026-08-18T06:16:54+00:00: ar2 119/119, migration 85/85; all checks passed.",
+      "pointer": {
+        "path": "packets/bias.run.json",
+        "command": "harness/bin/stomata run --full",
+        "commit": "ac6e536703e5f51d24852ea08a832fbcfd349e8f"
+      },
+      "captured_at": "2026-08-18T06:16:54+00:00"
+    }
+  ],
+  "gaps": [],
+  "decision": {
+    "question": "Can we finalize the threshold value based on these true geometric IoUs?",
+    "options": [
+      "merge as is",
+      "change X first"
+    ],
+    "recommendation": "merge as is",
+    "requested_of": "Sumer"
+  }
+}
