@@ -27,8 +27,8 @@
       "type": "ci_run",
       "claim": "CI run completed successfully (AR2 + Hub + Pancake checkouts). See GitHub Actions.",
       "pointer": {
-        "url": "https://github.com/agstack/ar2/actions/runs/PLACEHOLDER",
-        "ci_run": "PLACEHOLDER",
+        "url": "https://github.com/agstack/ar2/actions/runs/32112988372",
+        "ci_run": "32112988372",
         "jobs": [
           "ar2",
           "hub",
