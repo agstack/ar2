@@ -172,7 +172,7 @@ class HubUser(Base):
     first_name = Column(String(50), nullable=False)
     last_name = Column(String(50), nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    phone = Column(String(20), unique=True, index=True, nullable=False)
+    phone = Column(String(20), unique=False, index=True, nullable=True)
     password_hash = Column(String(255), nullable=False)
     client_id = Column(String(50), unique=True, index=True, nullable=True)
     client_secret_hash = Column(String(255), nullable=True)

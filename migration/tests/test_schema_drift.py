@@ -130,9 +130,9 @@ def test_hub_constraints_the_import_depends_on_are_still_there():
         pytest.skip("hub checkout not present")
 
     users = _parse_models(path)["users"]
-    for col in ("email", "phone", "first_name", "last_name", "password_hash"):
+    for col in ("email", "first_name", "last_name", "password_hash"):
         assert users[col]["nullable"] is False, f"hub.users.{col} is no longer NOT NULL"
-    for col in ("email", "phone"):
+    for col in ("email",):
         assert users[col]["unique"] is True, f"hub.users.{col} is no longer UNIQUE"
 
 

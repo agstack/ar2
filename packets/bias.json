@@ -27,7 +27,7 @@
       "type": "log_excerpt",
       "claim": "CSV table with bias curve measurements.",
       "pointer": {
-        "path": "bias_curve.csv"
+        "path": "packets/evidence/bias_curve.csv"
       },
       "captured_at": "2026-08-18T06:56:00+00:00"
     }
