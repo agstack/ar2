@@ -129,11 +129,6 @@ def resolve(
         best_iou = max(best_iou, iou)
         best_cont = max(best_cont, containment)
 
-        iou_pct = iou * 100.0
-        if 85.0 <= iou_pct < 95.0:
-            with open("band_pairs.txt", "a") as f:
-                f.write("1\n")
-
         if iou * 100.0 >= threshold_pct:
             if best_same is None or iou > best_same[0]:
                 best_same = (iou, cand_geo_id)

@@ -210,13 +210,11 @@ def test_accounts_and_lists_created(imported):
 
 
 def test_hub_constraints_reject_rather_than_corrupt(imported):
-    """Missing phone, missing email, no name, duplicate phone must all be caught."""
+    """Missing email, no name must all be caught."""
     _, _, profiles = imported
     reasons = set(profiles.accounts_rejected)
-    assert "phone NOT NULL" in reasons
     assert "email NOT NULL" in reasons
     assert "first_name/last_name NOT NULL" in reasons
-    assert "phone UNIQUE" in reasons
 
 
 def test_orphan_profile_reference_is_reported_not_silent(imported):

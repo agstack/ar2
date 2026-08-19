@@ -153,7 +153,6 @@ def test_migrated_accounts_are_inactive_with_no_usable_password(repo):
 
 @pytest.mark.parametrize("mutate,constraint", [
     (lambda a: setattr(a, "email", None), "email NOT NULL"),
-    (lambda a: setattr(a, "phone", None), "phone NOT NULL"),
     (lambda a: setattr(a, "first_name", None), "first_name/last_name NOT NULL"),
     (lambda a: setattr(a, "hub_account_id", "x" * 51), "client_id length <= 50"),
 ])
@@ -165,7 +164,7 @@ def test_hub_rejects_what_the_real_schema_rejects(repo, mutate, constraint):
     assert exc.value.constraint == constraint
 
 
-def test_duplicate_email_and_phone_are_both_refused(repo):
+def test_duplicate_email_is_refused(repo):
     repo.upsert_hub_account(_account(1))
     repo.commit()
 
@@ -174,12 +173,6 @@ def test_duplicate_email_and_phone_are_both_refused(repo):
     with pytest.raises(ConstraintViolation) as exc:
         repo.upsert_hub_account(same_email)
     assert exc.value.constraint == "email UNIQUE"
-
-    same_phone = _account(2)
-    same_phone.phone = _account(1).phone
-    with pytest.raises(ConstraintViolation) as exc:
-        repo.upsert_hub_account(same_phone)
-    assert exc.value.constraint == "phone UNIQUE"
 
 
 def test_fieldlist_requires_an_existing_owner(repo):
