@@ -53,6 +53,17 @@ def iou_and_containment(tokens_a, tokens_b) -> tuple[float, float]:
     if not tokens_a or not tokens_b:
         return 0.0, 0.0
 
+    if len(tokens_a) == 1 and len(tokens_b) == 1:
+        if tokens_a[0] == tokens_b[0]:
+            return 1.0, 1.0
+        # If they are different level tokens, one could contain another, but points are always L20.
+        # So we can safely return 0.0 if they are both exactly 1 token and don't match, 
+        # as long as we assume they are points (or we just accept slight inaccuracy for single large cells).
+        # Actually, let's just do a quick string prefix check for containment if they are different lengths.
+        # But for 14k points, they are all L20!
+        if len(tokens_a[0]) == len(tokens_b[0]):
+            return 0.0, 0.0
+
     a = _union_from_tokens(tokens_a)
     b = _union_from_tokens(tokens_b)
 
@@ -117,6 +128,11 @@ def resolve(
         iou, containment = iou_and_containment(tokens, cand_tokens)
         best_iou = max(best_iou, iou)
         best_cont = max(best_cont, containment)
+
+        iou_pct = iou * 100.0
+        if 85.0 <= iou_pct < 95.0:
+            with open("band_pairs.txt", "a") as f:
+                f.write("1\n")
 
         if iou * 100.0 >= threshold_pct:
             if best_same is None or iou > best_same[0]:

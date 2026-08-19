@@ -166,6 +166,19 @@ def import_fields(
         if _canonicalization_altered(legacy.wkt):
             report.canonicalization_changed.append(legacy.v1_geo_id)
 
+        # genuinely new (or nested, which still registers)
+        existing = repo.find_by_content_hash(content_hash)
+        if existing is not None:
+            # Identical canonical geometry already registered. content_hash is
+            # UNIQUE in ar2, so this cannot be inserted -- alias to the existing
+            # row instead of failing the run.
+            report.quarantine(QUARANTINE_DUPLICATE_CONTENT, legacy.v1_geo_id)
+            if not dry_run:
+                repo.upsert_alias(AliasRow(legacy.v1_geo_id, existing.geo_id,
+                                           legacy.v1_kind, SAME_AS))
+            continue
+
+
         blocking = g2.blocking_key(tokens)
         candidates = repo.find_candidates(blocking)
         decision = resolve(tokens, candidates, threshold_pct=threshold_pct)
@@ -190,18 +203,6 @@ def import_fields(
         parent_geo_id = decision.canonical_geo_id if decision.outcome == CHILD_OF else None
         if parent_geo_id is not None:
             report.resolved_child_of += 1
-
-        # genuinely new (or nested, which still registers)
-        existing = repo.find_by_content_hash(content_hash)
-        if existing is not None:
-            # Identical canonical geometry already registered. content_hash is
-            # UNIQUE in ar2, so this cannot be inserted -- alias to the existing
-            # row instead of failing the run.
-            report.quarantine(QUARANTINE_DUPLICATE_CONTENT, legacy.v1_geo_id)
-            if not dry_run:
-                repo.upsert_alias(AliasRow(legacy.v1_geo_id, existing.geo_id,
-                                           legacy.v1_kind, SAME_AS))
-            continue
 
         row = GeoIdRow(
             geo_id=v2_geo_id,

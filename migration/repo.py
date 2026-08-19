@@ -176,8 +176,6 @@ class InMemoryRepo:
     def upsert_hub_account(self, acct: HubAccount) -> None:
         if not acct.email:
             raise ConstraintViolation("hub.users", "email NOT NULL", acct.hub_account_id)
-        if not acct.phone:
-            raise ConstraintViolation("hub.users", "phone NOT NULL", acct.hub_account_id)
         if not acct.first_name or not acct.last_name:
             raise ConstraintViolation(
                 "hub.users", "first_name/last_name NOT NULL", acct.hub_account_id)
@@ -186,14 +184,11 @@ class InMemoryRepo:
         if prior_email and prior_email != acct.hub_account_id:
             raise ConstraintViolation("hub.users", "email UNIQUE",
                                       f"{acct.email} already held by {prior_email}")
-        prior_phone = self.hub_phones.get(acct.phone)
-        if prior_phone and prior_phone != acct.hub_account_id:
-            raise ConstraintViolation("hub.users", "phone UNIQUE",
-                                      f"{acct.phone} already held by {prior_phone}")
-
+        
         self.hub_accounts[acct.hub_account_id] = acct
         self.hub_emails[acct.email] = acct.hub_account_id
-        self.hub_phones[acct.phone] = acct.hub_account_id
+        if acct.phone:
+            self.hub_phones[acct.phone] = acct.hub_account_id
 
     def create_fieldlist(self, row: FieldListRow) -> None:
         key = (row.list_id, row.owner_hub_account_id)

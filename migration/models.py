@@ -140,6 +140,8 @@ class ListArtifact(Base):
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     list_id = Column(String(64), unique=True, index=True, nullable=False)
+    location_geo_id = Column(String, index=True, nullable=True)
+    event_type = Column(String(32), nullable=True)
     created_at = Column(DateTime, default=utcnow)
 
 

@@ -159,8 +159,6 @@ class SqlAlchemyRepo:
     def upsert_hub_account(self, acct: HubAccount) -> None:
         if not acct.email:
             raise ConstraintViolation("hub.users", "email NOT NULL", acct.hub_account_id)
-        if not acct.phone:
-            raise ConstraintViolation("hub.users", "phone NOT NULL", acct.hub_account_id)
         if not acct.first_name or not acct.last_name:
             raise ConstraintViolation("hub.users", "first_name/last_name NOT NULL",
                                       acct.hub_account_id)
@@ -180,10 +178,6 @@ class SqlAlchemyRepo:
         if clash is not None:
             raise ConstraintViolation("hub.users", "email UNIQUE",
                                       f"{acct.email} already held by {clash.client_id}")
-        clash = self.hub.scalar(select(HubUser).where(HubUser.phone == acct.phone))
-        if clash is not None:
-            raise ConstraintViolation("hub.users", "phone UNIQUE",
-                                      f"{acct.phone} already held by {clash.client_id}")
 
         self.hub.add(HubUser(
             first_name=acct.first_name,
