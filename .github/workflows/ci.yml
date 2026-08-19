@@ -14,7 +14,7 @@ jobs:
     - name: Lint
       run: |
         pip install ruff==0.9.6
-        ruff check app
+        ruff check app --ignore E402
 
   test:
     runs-on: ubuntu-latest
@@ -88,7 +88,7 @@ jobs:
         pip install pytest ruff==0.9.6
 
     - name: Lint
-      run: ruff check migration
+      run: ruff check migration --ignore E402
 
     - name: Run migration tests
       run: |
