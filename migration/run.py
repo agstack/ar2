@@ -108,11 +108,19 @@ def print_field_report(r, elapsed: float) -> None:
     _row("considered", f"{r.considered:,}")
     _row("imported new", f"{r.imported_new:,}")
     _row("  of which nested (child_of)", f"{r.resolved_child_of:,}", indent=4)
+    # A registry that is half pins is a different thing to plan around than one
+    # that is all boundaries, and the total hides which it is. This was the
+    # single most consequential fact about the first full run and it did not
+    # appear in the report at all.
+    _row("  of which points, not boundaries", f"{r.imported_points:,}", indent=4)
     _row("resolved same_as (merged)", f"{r.resolved_same_as:,}")
+    _row("  exact geometry match", f"{r.resolved_by_content_hash:,}", indent=4)
+    _row("  overlap above threshold",
+         f"{r.resolved_same_as - r.resolved_by_content_hash:,}", indent=4)
     _row("skipped, already imported", f"{r.skipped_already_done:,}")
     _row("UUID -> content-derived identity", f"{len(r.uuid_promoted):,}")
-    _row("canonicalization altered geometry", f"{len(r.canonicalization_changed):,}")
-    _row("quarantined", f"{r.quarantined_total:,}")
+    _row("canonicalization altered boundary", f"{len(r.canonicalization_changed):,}")
+    _row("REJECTED, not imported", f"{r.quarantined_total:,}")
     for reason, ids in sorted(r.quarantined.items()):
         _row(f"  {reason}", f"{len(ids):,}", indent=4)
     if r.considered:
@@ -278,8 +286,11 @@ def main(argv=None) -> int:
             f"did on collision: fail, or return the existing record?")
     if fields.quarantined_total:
         decisions.append(
-            f"{fields.quarantined_total:,} fields quarantined — policy needed "
-            f"(quarantine / flag / reject).")
+            f"{fields.quarantined_total:,} of {fields.considered:,} fields rejected "
+            f"({fields.quarantined_total / max(fields.considered, 1):.2%}) — read the "
+            f"reasons above before deciding anything. A reason naming a geometry type "
+            f"is usually a missing code path rather than bad data, and needs code, not "
+            f"a policy.")
     if profiles.merged_ownership:
         decisions.append(
             f"{len(profiles.merged_ownership)} merged GeoID(s) with multiple owners — "

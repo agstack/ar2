@@ -93,6 +93,29 @@ def _mirror(base, table: str) -> set[str]:
     return {c.name for c in base.metadata.tables[table].columns}
 
 
+def _mirror_constraints(base, table: str) -> dict[str, dict]:
+    """Nullability and uniqueness of the mirror, in the shape _parse_models returns.
+
+    SQLAlchemy resolves uniqueness in two places -- unique=True on the column and
+    a UniqueConstraint on the table -- and a reader comparing only the first would
+    call a uniquely-constrained column non-unique.
+    """
+    tbl = base.metadata.tables[table]
+    from sqlalchemy import UniqueConstraint
+    constrained = {
+        c.name
+        for con in tbl.constraints if isinstance(con, UniqueConstraint)
+        for c in con.columns
+    }
+    return {
+        col.name: {
+            "nullable": col.nullable,
+            "unique": bool(col.unique) or col.name in constrained,
+        }
+        for col in tbl.columns
+    }
+
+
 @pytest.mark.parametrize("which,table,mirror_base", [
     ("ar2", "geo_ids", Base),
     ("hub", "users", Base),
@@ -119,11 +142,76 @@ def test_mirrored_columns_match_the_real_schema(which, table, mirror_base):
     )
 
 
+@pytest.mark.parametrize("which,table,mirror_base", [
+    ("ar2", "geo_ids", Base),
+    ("hub", "users", Base),
+    ("pancake", "users", PancakeBase),
+    ("pancake", "fieldlists", PancakeBase),
+    ("ar2", "listmember_edge", Base),
+])
+def test_mirrored_constraints_match_the_real_schema(which, table, mirror_base):
+    """Matching column names is not matching the schema.
+
+    The mirror exists so the import can predict what the real database will
+    accept. A mirror that is more permissive than the system predicts acceptance
+    for rows the system will reject, and the run reports a clean import that
+    cannot happen -- which is worse than an error, because it looks like success.
+
+    This is not hypothetical. hub.users.phone was relaxed here to nullable and
+    non-unique while the hub still enforced NOT NULL UNIQUE. The import then
+    reported 0 rejected accounts where a real run would have rejected 85. The
+    column-name comparison above passed throughout, because the column was still
+    called phone.
+
+    A mirror may legitimately be *stricter* than the real schema -- that predicts
+    rejections that will not happen, which is a false alarm rather than a false
+    clean bill. Only permissiveness is failed here.
+    """
+    path = _locate(which)
+    if path is None:
+        pytest.skip(f"{which} checkout not present")
+
+    real = _parse_models(path)[table]
+    ours = _mirror_constraints(mirror_base, table)
+
+    too_permissive = []
+    for col, real_meta in real.items():
+        if col not in ours:
+            continue
+        # real nullable=None means the keyword was absent, i.e. SQLAlchemy's
+        # default of nullable=True, so there is nothing stricter to violate.
+        if real_meta["nullable"] is False and ours[col]["nullable"] is True:
+            too_permissive.append(f"{col}: real is NOT NULL, mirror allows NULL")
+        if real_meta["unique"] is True and ours[col]["unique"] is False:
+            too_permissive.append(f"{col}: real is UNIQUE, mirror is not")
+
+    assert not too_permissive, (
+        f"the {which}.{table} mirror is more permissive than the real schema, so "
+        f"the import will predict success for rows the system rejects:\n"
+        + "".join(f"  - {p}\n" for p in too_permissive)
+        + f"  source of truth: {path}\n"
+        "  Either relax the real schema too, or restore the mirror."
+    )
+
+
 def test_hub_constraints_the_import_depends_on_are_still_there():
-    """The rejection rules in db_repo exist because of these four constraints.
+    """The rejection rules in db_repo exist because of these constraints.
 
     If any of them relaxes, accounts this import currently quarantines would
     import cleanly and the quarantine becomes a false positive.
+
+    phone is deliberately absent from both lists. It used to be in both, and it
+    was removed because the hub genuinely relaxed it -- UNIQUE NOT NULL rejected
+    85 of 345 real accounts, 8 with no number and 77 sharing one, and a shared
+    household or cooperative line is ordinary here (ar2-hub, users.phone).
+
+    Worth recording how that landed, because the order was wrong and the order is
+    the whole point: the mirror and this guard were relaxed first, while the hub
+    still enforced both constraints. For that interval the import reported 0
+    rejected accounts and a real run would still have rejected 85. Relaxing the
+    guard is the last step, never the first -- and
+    test_mirrored_constraints_match_the_real_schema now fails whenever the mirror
+    runs ahead of the system, which is the failure this comment describes.
     """
     path = _locate("hub")
     if path is None:
