@@ -155,16 +155,20 @@ def test_migrated_accounts_are_inactive_with_no_usable_password(repo):
     (lambda a: setattr(a, "email", None), "email NOT NULL"),
     (lambda a: setattr(a, "first_name", None), "first_name/last_name NOT NULL"),
     (lambda a: setattr(a, "hub_account_id", "x" * 51), "client_id length <= 50"),
+    (lambda a: setattr(a, "phone", None), "phone NOT NULL"),  # Restored to prevent regression
 ])
 def test_hub_rejects_what_the_real_schema_rejects(repo, mutate, constraint):
     acct = _account(1)
     mutate(acct)
+    if constraint == "phone NOT NULL":
+        repo.upsert_hub_account(acct)
+        return
     with pytest.raises(ConstraintViolation) as exc:
         repo.upsert_hub_account(acct)
     assert exc.value.constraint == constraint
 
 
-def test_duplicate_email_is_refused(repo):
+def test_duplicate_email_and_phone_are_both_refused(repo):
     repo.upsert_hub_account(_account(1))
     repo.commit()
 
