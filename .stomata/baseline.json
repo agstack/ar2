@@ -1,7 +1,7 @@
 {
   "$stomata_artifact": "baseline",
-  "captured_at": "2026-08-19T18:50:48+00:00",
-  "commit": "0691084ddbea155db2806cd54e263984104ec34a",
+  "captured_at": "2026-08-19T19:13:10+00:00",
+  "commit": "ceff9444e3ab90b054a5c99898901cff6cd96360",
   "dirty_when_captured": true,
   "suites": {
     "ar2": {

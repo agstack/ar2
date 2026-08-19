@@ -102,6 +102,9 @@
       "why": "Holds the invariant that the import report's categories sum to the total and do not overlap. Removing an assertion here is how 268 successful aliases came to be reported as quarantined."
     }
   ],
+  "briefings": [
+    "AGENTS.md"
+  ],
   "mutations": [
     {
       "name": "cover the bounding box instead of the polygon",
