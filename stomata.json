@@ -1,15 +1,5 @@
 {
   "schema_version": "1.0.0",
-  "_comment": [
-    "AR2's contract with the harness. Machine-read by stomata; edited by humans.",
-    "",
-    "Adding a suite, a reachability claim, a forbidden pattern or a mutation here is",
-    "how a guarantee becomes enforced rather than remembered. Removing one is a",
-    "visible diff, which is the point: a check that can vanish quietly is not a check.",
-    "",
-    "Commands use {python} rather than a bare interpreter name so the same contract",
-    "works in a virtualenv, a container and CI without edits."
-  ],
   "python": "python3",
   "suites": [
     {
@@ -102,6 +92,16 @@
       "why": "The area pre-filter gated all same_as resolution and evaluated to zero whenever either area was missing, so every import with absent area silently became a duplicate rather than resolving to the field it matched."
     }
   ],
+  "guards": [
+    {
+      "path": "migration/tests/test_schema_drift.py",
+      "why": "On 2026-08-19 the phone column was removed from this file's NOT NULL and UNIQUE lists so a change would pass, and the guard then certified an import that would have been rejected 85 times by the real hub. It may assert more over time, never less."
+    },
+    {
+      "path": "migration/tests/test_report_arithmetic.py",
+      "why": "Holds the invariant that the import report's categories sum to the total and do not overlap. Removing an assertion here is how 268 successful aliases came to be reported as quarantined."
+    }
+  ],
   "mutations": [
     {
       "name": "cover the bounding box instead of the polygon",
@@ -149,5 +149,15 @@
     "migration/tests/",
     "test_",
     "conftest.py"
+  ],
+  "_comment": [
+    "AR2's contract with the harness. Machine-read by stomata; edited by humans.",
+    "",
+    "Adding a suite, a reachability claim, a forbidden pattern or a mutation here is",
+    "how a guarantee becomes enforced rather than remembered. Removing one is a",
+    "visible diff, which is the point: a check that can vanish quietly is not a check.",
+    "",
+    "Commands use {python} rather than a bare interpreter name so the same contract",
+    "works in a virtualenv, a container and CI without edits."
   ]
 }

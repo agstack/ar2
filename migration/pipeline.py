@@ -78,6 +78,11 @@ class FieldReport:
     # two mean different things: an exact content match is certainty, a
     # threshold match is a judgement that the threshold could change.
     resolved_by_content_hash: int = 0
+    # A SUBSET of imported_new, not a peer of it. A child field is a genuinely new
+    # GeoID that additionally records a parent link, so it is counted in both.
+    # Listing it alongside imported_new made the categories sum to more than
+    # considered, which reads as a field processed twice; see
+    # migration/tests/test_report_arithmetic.py.
     resolved_child_of: int = 0
     skipped_already_done: int = 0
     quarantined: dict[str, list[str]] = field(default_factory=dict)
