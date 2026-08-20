@@ -69,7 +69,7 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f migration/requirements.txt ]; then pip install -r migration/requirements.txt; fi
-          pip install pytest ruff
+          pip install pytest ruff==0.9.6
 
       - name: Apply schema upgrades
         env:
