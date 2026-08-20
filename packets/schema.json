@@ -1,0 +1,53 @@
+{
+  "$stomata_artifact": "review_packet",
+  "schema_version": "1.0.0",
+  "title": "Schema upgrade 20260814",
+  "author": "Rajat",
+  "reviewer": "Sumer",
+  "produced_at": "2026-08-18T04:38:20+00:00",
+  "change": {
+    "summary": "Apply schema_upgrade_20260814.sql to local replica and test for idempotence.",
+    "commits": [
+      "b3c55ed1421b47cf450f6c5c6cebc70086f8f610"
+    ],
+    "paths": []
+  },
+  "evidence": [
+    {
+      "type": "harness_state",
+      "claim": "Harness run at 2026-08-18T04:26:57+00:00: ar2 119/119, migration 85/85; all checks passed.",
+      "pointer": {
+        "path": "packets/schema.run.json",
+        "command": "harness/bin/stomata run --full",
+        "commit": "b3c55ed1421b47cf450f6c5c6cebc70086f8f610"
+      },
+      "captured_at": "2026-08-18T04:26:57+00:00"
+    },
+    {
+      "type": "log_excerpt",
+      "claim": "Schema upgrade applies successfully (1st run).",
+      "pointer": {
+        "path": "packets/schema.run.json"
+      },
+      "captured_at": "2026-08-18T04:38:20+00:00"
+    },
+    {
+      "type": "log_excerpt",
+      "claim": "Schema upgrade is idempotent (2nd run).",
+      "pointer": {
+        "path": "packets/evidence/schema2.log"
+      },
+      "captured_at": "2026-08-18T04:38:20+00:00"
+    }
+  ],
+  "gaps": [],
+  "decision": {
+    "question": "Is the schema change safe to run against production?",
+    "options": [
+      "merge as is",
+      "change X first"
+    ],
+    "recommendation": "merge as is",
+    "requested_of": "Sumer"
+  }
+}

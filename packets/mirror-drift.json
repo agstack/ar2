@@ -1,0 +1,72 @@
+{
+  "$stomata_artifact": "review_packet",
+  "schema_version": "1.0.0",
+  "title": "Fail when the mirror is more permissive than the system it mirrors",
+  "author": "Sumer",
+  "reviewer": "Rajat",
+  "produced_at": "2026-08-19T18:29:31+00:00",
+  "change": {
+    "summary": "hub.users.phone was relaxed to nullable and non-unique in the migration mirror, and phone was removed from the constraint guard, while ar2-hub still enforced NOT NULL UNIQUE. The import reported 0 rejected accounts where a real run would still have rejected 85. The existing drift guard compared column names only, so it passed. Adds a guard that compares nullability and uniqueness and fails on permissiveness; relaxes the real hub in ar2-hub#7 with the DDL create_all will not apply; corrects three reporting defects that made the run read as 275 open problems when it rejected 7 fields; and bumps the harness, whose pinned revision counted ruff's success banner as a violation so the lint ratchet reported 1 where this tree has 36.",
+    "commits": [
+      "40369a6ab2e675c40dc43f95ea65ae7ca34384cb"
+    ],
+    "paths": [
+      "migration/tests/test_schema_drift.py",
+      "migration/pipeline.py",
+      "migration/run.py",
+      "migration/tests/test_points_are_importable.py",
+      "harness",
+      "patches/pin-ruff-in-stomata-workflow.patch"
+    ]
+  },
+  "evidence": [
+    {
+      "type": "harness_state",
+      "claim": "Harness run at 2026-08-19T18:29:10+00:00: ar2 119/119, migration 105/105; all checks passed.",
+      "pointer": {
+        "path": "packets/mirror-drift.run.json",
+        "command": "harness/bin/stomata run --full",
+        "commit": "40369a6ab2e675c40dc43f95ea65ae7ca34384cb"
+      },
+      "captured_at": "2026-08-19T18:29:10+00:00"
+    },
+    {
+      "type": "code_reference",
+      "claim": "The real hub at ar2-hub main has phone = Column(String(20), unique=True, index=True, nullable=False) at user_models.py:21, against unique=False, nullable=True in migration/models.py:177. The new guard fails against the former and passes against ar2-hub#7.",
+      "pointer": {
+        "path": "migration/tests/test_schema_drift.py",
+        "command": "MIGRATION_HUB_MODELS=<ar2-hub>/user_models.py pytest migration/tests/test_schema_drift.py -k constraints_match"
+      },
+      "captured_at": "2026-08-19T18:29:31+00:00"
+    }
+  ],
+  "gaps": [
+    {
+      "kind": "not_covered",
+      "description": "Not rerun against live AR 1.0 -- no access. The reporting changes alter no import decision, so the field outcomes stand; what changes is how they are described. A rerun is still needed to print the point count and the corrected boundary-repair figure."
+    },
+    {
+      "kind": "deferred",
+      "description": "The 85 accounts remain blocked until ar2-hub#7 merges AND its DDL runs against the deployed hub. Merging the model alone leaves create_all unable to alter the column, so the database keeps rejecting them.",
+      "owner": "Rajat",
+      "target": "before the next live import run"
+    },
+    {
+      "kind": "not_covered",
+      "description": "patches/pin-ruff-in-stomata-workflow.patch is not applied -- my token cannot write .github/workflows. Until it is, the gating job installs ruff unpinned and the ratchet's measuring stick can move between runs."
+    },
+    {
+      "kind": "unknown",
+      "description": "1,117 association join failures are unexplained here beyond their correlation with 1,115 AR 1.0 orphan profile references -- profiles citing GeoIDs absent from the source. If that is the whole explanation it is a source data defect and not ours, but the two numbers differ by 2 and nobody has reconciled them."
+    }
+  ],
+  "decision": {
+    "question": "Merge ar2-hub#7 and run its DDL, apply the stomata workflow patch, then rerun the import and report the point count, the corrected boundary-repair figure, and whether 85 accounts now admit?",
+    "options": [
+      "merge both, run the DDL, then rerun",
+      "review the guard first"
+    ],
+    "recommendation": "merge both, run the DDL, then rerun",
+    "requested_of": "Rajat"
+  }
+}

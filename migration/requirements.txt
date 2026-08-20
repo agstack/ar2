@@ -1,0 +1,13 @@
+# Requirements for the migration package only. Kept separate from ar2's
+# requirements.txt because the import runs as a one-off operation and pins
+# s2geometry, which the node itself does not yet depend on.
+#
+# Python 3.10+ is required by s2geometry's abi3 wheels. CI is on 3.12.
+
+s2geometry==0.14.0
+shapely==2.0.6
+SQLAlchemy==2.0.51
+
+# Driver for the AR2 and Hub databases in a real run. Not needed for the
+# fixture run or the test suite, both of which use SQLite.
+psycopg2-binary==2.9.10

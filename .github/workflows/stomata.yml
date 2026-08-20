@@ -1,0 +1,126 @@
+# Copy to .github/workflows/stomata.yml in the repository being governed.
+#
+# Pushing a file under .github/workflows/ requires a token with `workflow` scope.
+# If yours lacks it the push is rejected with a message that does not say so
+# clearly; someone whose token has the scope needs to add this file.
+#
+# The important line is the last one. CI does NOT inherit the local skip waivers:
+# a waiver that names its environment ("waived locally, where the hub is not
+# checked out") is only honest if the environment that has no excuse removes it.
+
+name: stomata
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ar2_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The harness is a pinned submodule. Without this it is absent and the
+          # job fails on a missing file rather than on anything meaningful.
+          submodules: true
+          token: ${{ secrets.AGSTACK_PAT }}
+
+      # Sibling repositories that cross-layer tests compare against. Without
+      # these, those tests SKIP -- and a skipped cross-layer test reports the
+      # same green as one that ran. That has happened three times.
+      - name: Check out ar2-hub
+        uses: actions/checkout@v4
+        with:
+          repository: agstack/ar2-hub
+          path: .sibling/ar2-hub
+          token: ${{ secrets.AGSTACK_PAT }}
+          ref: main
+
+      - name: Check out pancake
+        uses: actions/checkout@v4
+        with:
+          repository: agstack/pancake
+          path: .sibling/pancake
+          token: ${{ secrets.AGSTACK_PAT }}
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f migration/requirements.txt ]; then pip install -r migration/requirements.txt; fi
+          pip install pytest ruff
+
+      - name: Apply schema upgrades
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ar2_test
+        run: |
+          # create_all adds missing tables but never missing columns, so a
+          # database that already exists needs these explicitly. Harmless here,
+          # where the database is empty, and it keeps the script exercised: a
+          # migration nobody runs is a migration nobody knows is broken.
+          for f in scripts/schema_upgrade_*.sql; do
+            [ -e "$f" ] || continue
+            psql "$DATABASE_URL" -f "$f"
+          done
+
+      - name: Run the gate, including mutations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ar2_test
+          HUB_CHECKOUT: ${{ github.workspace }}/.sibling/ar2-hub
+          PANCAKE_CHECKOUT: ${{ github.workspace }}/.sibling/pancake
+          MIGRATION_HUB_MODELS: ${{ github.workspace }}/.sibling/ar2-hub/user_models.py
+          MIGRATION_PANCAKE_MODELS: ${{ github.workspace }}/.sibling/pancake/services/pancake_services/grants/models.py
+          STOMATA_PYTHON: python
+          NO_COLOR: '1'
+        run: harness/bin/stomata run --full
+
+      - name: Publish the run record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stomata-state
+          path: .stomata/state.json
+
+      - name: Refuse locally-waived skips here
+        if: always()
+        env:
+          NO_COLOR: '1'
+        run: |
+          # CI has the sibling checkouts, so nothing may skip. This is the line
+          # that makes an environment-scoped waiver honest rather than permanent.
+          python - <<'PY'
+          import json, pathlib, sys
+          state = json.loads(pathlib.Path(".stomata/state.json").read_text())
+          skipped = [
+              (s["name"], reason)
+              for s in state["suites"]
+              for reason in s.get("skip_reasons", [])
+          ]
+          if skipped:
+              print("Skips are not permitted in CI, where every dependency is present:")
+              for suite, reason in skipped:
+                  print(f"  {suite}: {reason['location']}: {reason['reason']}")
+              sys.exit(1)
+          print("no skips")
+          PY

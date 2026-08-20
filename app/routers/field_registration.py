@@ -10,7 +10,6 @@ import asyncio
 import json
 import random
 import time
-import uuid
 from typing import Any
 
 from fastapi import (
@@ -25,6 +24,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app import geoid_v2
 from app.auth import require_hub_user
 from app.database import get_db
 from app.models import GeoID
@@ -89,16 +89,37 @@ async def register_field_boundary(
         if area_in_acres > 1000:
             raise HTTPException(status_code=400, detail="Cannot register a field with Area greater than 1000 acres")
 
+        # The identity is the v2 cover: the polygon's own normalized S2 cell
+        # union, hashed. The fixed-level indices below are retained because the
+        # API exposes them and because blocking and legacy comparison use them,
+        # but they no longer decide identity.
+        try:
+            v2_tokens, geo_id = geoid_v2.geo_id_with_tokens(payload.wkt)
+        except geoid_v2.GeometryUnusable as exc:
+            # Refusing is the point. The old path minted a uuid4() here, which
+            # produced a registration whose identifier was derived from nothing
+            # and could never be recomputed or matched.
+            raise HTTPException(
+                status_code=422,
+                detail=f"geometry cannot yield a content-derived GeoID: {exc}"
+            ) from exc
+
         indices = {
             13: S2Service.wkt_to_cell_tokens(payload.wkt, 13),
-            20: S2Service.wkt_to_cell_tokens(payload.wkt, 20)
+            20: S2Service.wkt_to_cell_tokens(payload.wkt, 20),
+            geoid_v2.COVER_KEY: v2_tokens,
+            geoid_v2.REGIME_KEY: geoid_v2.REGIME_VERSION,
         }
 
-        geo_id = Utils.generate_geo_id(indices[13])
-        geo_id_l20 = Utils.generate_geo_id(indices[20])
-        geo_id_short = GeoDataUtils.generate_short_geo_id(geo_id)
-        geo_id_l20_short = GeoDataUtils.generate_short_geo_id(geo_id_l20)
+        geo_id_short = geoid_v2.geo_id_short(geo_id)
 
+        # No cascade and no collision escape hatch below. Under v1 a repeated
+        # GeoID meant two different fields had landed in the same L13 cells --
+        # ~1.2 km across, so routine -- and the code escaped by hashing L20 and
+        # then, failing that, by minting a uuid4(). Under v2 a repeated GeoID
+        # means the canonicalized geometry is identical, which resolution already
+        # reports as same_as at IoU 1.0. So the duplicate is an answer rather
+        # than a problem, and it still records the submission lineage.
         action, canonical_geo_id = Utils.resolve_or_register(
             db=db,
             geo_id=geo_id,
@@ -118,12 +139,6 @@ async def register_field_boundary(
 
         target_geo_id = geo_id
         target_geo_id_short = geo_id_short
-        if Utils.lookup_geo_ids(db, geo_id):
-            target_geo_id = geo_id_l20
-            target_geo_id_short = geo_id_l20_short
-            if Utils.lookup_geo_ids(db, geo_id_l20):
-                target_geo_id = str(uuid.uuid4())
-                target_geo_id_short = GeoDataUtils.generate_short_geo_id(target_geo_id)
 
         if payload.return_s2_indices:
             indices.update({
@@ -418,7 +433,13 @@ async def register_field_boundaries_geojson(
                         20: S2Service.wkt_to_cell_tokens(field_wkt, 20, point=True),
                         30: S2Service.wkt_to_cell_tokens(field_wkt, 30, point=True)
                     }
-                    geo_id = Utils.generate_geo_id(indices[30]) 
+                    # A point has no area, so the polygon coverer cannot be used.
+                    # Its leaf cell is still content-derived and deterministic,
+                    # and it is a descendant of any containing field's cover, so
+                    # the existing ancestor probe relates the two unchanged.
+                    v2_tokens, geo_id = geoid_v2.point_geo_id_with_tokens(lat, lng)
+                    indices[geoid_v2.COVER_KEY] = v2_tokens
+                    indices[geoid_v2.REGIME_KEY] = geoid_v2.REGIME_VERSION
                 else: 
                     lat = feature['geometry']['coordinates'][0][0][1]
                     lng = feature['geometry']['coordinates'][0][0][0]
@@ -430,7 +451,22 @@ async def register_field_boundaries_geojson(
                         19: S2Service.wkt_to_cell_tokens(field_wkt, 19),
                         20: S2Service.wkt_to_cell_tokens(field_wkt, 20)
                     }
-                    geo_id = Utils.generate_geo_id(indices[13]) 
+                    try:
+                        v2_tokens, geo_id = geoid_v2.geo_id_with_tokens(field_wkt)
+                    except geoid_v2.GeometryUnusable as exc:
+                        results.append({
+                            "status": "skipped",
+                            "message": f"geometry cannot yield a content-derived GeoID: {exc}",
+                            "geo_json": feature
+                        })
+                        yield json.dumps({
+                            "status": "processing",
+                            "progress": index + 1,
+                            "percentage": round(((index + 1) / total_features) * 100, 2)
+                        }) + "\n"
+                        continue
+                    indices[geoid_v2.COVER_KEY] = v2_tokens
+                    indices[geoid_v2.REGIME_KEY] = geoid_v2.REGIME_VERSION
 
                 country = Utils.get_country_from_point([lng, lat])
                 area_ha = None
@@ -451,9 +487,7 @@ async def register_field_boundaries_geojson(
                         }) + "\n"
                         continue
 
-                geo_id_l20 = Utils.generate_geo_id(indices[20])
-                geo_id_short = GeoDataUtils.generate_short_geo_id(geo_id)
-                geo_id_l20_short = GeoDataUtils.generate_short_geo_id(geo_id_l20)
+                geo_id_short = geoid_v2.geo_id_short(geo_id)
                 
                 s2_index = feature.get('properties', {}).get('s2_index')
                 s2_indexes_to_remove = -1
@@ -493,14 +527,29 @@ async def register_field_boundaries_geojson(
                         }) + "\n"
                         continue
 
+                # Points get no resolution pass -- there is no area to compare --
+                # so a repeat has to be caught here or it would violate the unique
+                # constraint on geo_id. Two registrations of the same point are
+                # the same point; that is the identity working, not a collision.
+                if geometry_type == 'Point' and Utils.lookup_geo_ids(db, geo_id):
+                    results.append({
+                        "status": "exists",
+                        "message": "Point already registered",
+                        "geo_id": geo_id,
+                        "geo_json": feature
+                    })
+                    yield json.dumps({
+                        "status": "processing",
+                        "progress": index + 1,
+                        "percentage": round(((index + 1) / total_features) * 100, 2)
+                    }) + "\n"
+                    continue
+
+                # No cascade and no uuid4() fallback: see the note on the single
+                # registration path. A repeated v2 GeoID is a same_as, which
+                # resolution above has already handled for polygons.
                 target_geo_id = geo_id
                 target_geo_id_short = geo_id_short
-                if Utils.lookup_geo_ids(db, geo_id):
-                    target_geo_id = geo_id_l20
-                    target_geo_id_short = geo_id_l20_short
-                    if Utils.lookup_geo_ids(db, geo_id_l20):
-                        target_geo_id = str(uuid.uuid4())
-                        target_geo_id_short = GeoDataUtils.generate_short_geo_id(target_geo_id)
 
                 records_list = Utils.records_s2_cell_tokens(indices)
 

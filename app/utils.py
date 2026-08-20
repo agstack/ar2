@@ -19,6 +19,7 @@ from shapely.wkt import loads as load_wkt
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app import geoid_v2
 from app.models.geo_id_model import GeoID, GeoIDAlias
 
 load_dotenv()
@@ -94,6 +95,22 @@ class Utils:
         return m.hexdigest()
 
     @staticmethod
+    def generate_geo_id_v2(wkt_string: str) -> str:
+        return geoid_v2.geo_id(wkt_string)
+
+    @staticmethod
+    def generate_geo_id_v2_with_tokens(wkt_string: str):
+        """Delegates to app.geoid_v2, which is the single implementation.
+
+        The earlier inline version passed only the exterior ring to S2Loop and
+        kept only the first part of a MultiPolygon, so a field with a hole
+        covered its hole and a multi-part field took the identity of one
+        fragment. Both matter on real data, because make_valid() *produces*
+        MultiPolygons from self-intersecting input.
+        """
+        return geoid_v2.geo_id_with_tokens(wkt_string)
+
+    @staticmethod
     def lookup_geo_ids(db: Session, geo_id_to_lookup: str):
 
         record = db.query(GeoID).filter(GeoID.geo_id == geo_id_to_lookup).first()
@@ -103,11 +120,18 @@ class Utils:
 
     @staticmethod
     def records_s2_cell_tokens(s2_cell_tokens_dict: dict) -> list:
+        """Flatten the per-level covers into the s2_cells column.
 
+        Only list values are flattened. The indices dict also carries the regime
+        label, which is a bare string -- extending a list with it would splat it
+        into individual characters and write "v" and "2" in as if they were cell
+        tokens.
+        """
         all_tokens = []
         for s2_cell_tokens in s2_cell_tokens_dict.values():
-            all_tokens.extend(s2_cell_tokens)
-        
+            if isinstance(s2_cell_tokens, (list, tuple, set)):
+                all_tokens.extend(s2_cell_tokens)
+
         return list(set(all_tokens))
 
     @staticmethod
@@ -154,54 +178,84 @@ class Utils:
 
     @staticmethod
     def check_percentage_match(db: Session, matched_geo_ids: list, s2_index_list: list, resolution_level: int, threshold: int, area_new: float = 0.0) -> dict:
+        """Classify candidates as same_as or child_of by area-exact cover overlap.
 
+        Two changes from the token-set version.
+
+        OVERLAP IS NOW AREA-EXACT. Set intersection over tokens cannot see
+        ancestor/descendant overlap: one L16 cell and its own four L17 children
+        cover the identical region and share no token, so the old arithmetic
+        scored them as zero. That was harmless while every cover sat at a single
+        level, and is wrong the moment v2 stores normalized multi-level covers.
+        On uniform-level covers the two agree bit for bit, so no v1 decision
+        changes.
+
+        THE AREA PRE-FILTER IS GONE. It gated the entire same_as branch behind
+        `area_ratio >= threshold`, and area_ratio is 0 whenever either area is
+        missing -- so a field with no recorded area could never resolve to an
+        existing one, no matter how exactly the geometry matched. It silently
+        turned every import with absent area into a duplicate. It existed as a
+        cheap prune, and exact IoU makes it redundant as well as harmful.
+
+        `area_new` is accepted for signature compatibility and no longer read.
+        """
         result = {"same_as": [], "child_of": []}
-        if not matched_geo_ids:
+        if not matched_geo_ids or not s2_index_list:
             return result
-        
-        candidates = db.query(GeoID.id, GeoID.geo_id, GeoID.area_ha_approx, GeoID.geo_data, GeoID.created_at)\
-                       .filter(GeoID.geo_id.in_(matched_geo_ids)).all()
-        
-        s2_index_set = set(s2_index_list)
 
-        for cand_id, cand_geo_id, cand_area, cand_geo_data, cand_created_at in candidates:
-            cand_area = cand_area or 0.0
-            min_area = min(area_new, cand_area) if area_new > 0 and cand_area > 0 else 0
-            max_area = max(area_new, cand_area) if area_new > 0 or cand_area > 0 else 1
-            area_ratio = min_area / float(max_area) if max_area > 0 else 0
-            
-            geo_id_cell_tokens = cand_geo_data.get(str(resolution_level), [])
-            geo_id_cell_set = set(geo_id_cell_tokens)
-            
-            if not geo_id_cell_set:
+        candidates = db.query(GeoID.id, GeoID.geo_id, GeoID.geo_data, GeoID.s2_cells, GeoID.created_at)\
+                       .filter(GeoID.geo_id.in_(matched_geo_ids)).all()
+
+        for cand_id, cand_geo_id, cand_geo_data, cand_s2_cells, cand_created_at in candidates:
+            cand_tokens = Utils._comparison_cover(cand_geo_data, cand_s2_cells, resolution_level)
+            if not cand_tokens:
                 continue
 
-            intersection = len(s2_index_set & geo_id_cell_set)
-            
-            # Tier 2 prune for same_as
-            if area_ratio >= (threshold / 100.0):
-                union = len(s2_index_set | geo_id_cell_set)
-                percentage_match = (intersection / float(union)) * 100
-                if percentage_match >= threshold:
-                    result["same_as"].append((cand_geo_id, cand_created_at, cand_id))
-                    continue
-                    
-            # Check for high containment (child_of)
-            smaller_set_size = min(len(s2_index_set), len(geo_id_cell_set))
-            if smaller_set_size > 0:
-                containment_match = (intersection / float(smaller_set_size)) * 100
-                if containment_match >= threshold:
-                    result["child_of"].append((cand_geo_id, cand_created_at, cand_id))
-                
+            iou, containment = geoid_v2.iou_and_containment(s2_index_list, cand_tokens)
+
+            if iou * 100.0 >= threshold:
+                result["same_as"].append((cand_geo_id, cand_created_at, cand_id))
+            elif containment * 100.0 >= threshold:
+                result["child_of"].append((cand_geo_id, cand_created_at, cand_id))
+
         return result
 
     @staticmethod
+    def _comparison_cover(geo_data: dict | None, s2_cells: list | None, resolution_level: int) -> list:
+        """The cover to compare a candidate against.
+
+        Prefers the canonical v2 cover, falls back to the stored fixed-level
+        index, and finally to s2_cells. The fallbacks are what let a v2
+        registration resolve against fields registered under v1, which is the
+        whole point of keeping them: during the migration window both regimes
+        are present in the same table.
+        """
+        geo_data = geo_data or {}
+        return (
+            geo_data.get(geoid_v2.COVER_KEY)
+            or geo_data.get(str(resolution_level))
+            or s2_cells
+            or []
+        )
+
+    @staticmethod
     def resolve_or_register(db: Session, geo_id: str, indices: dict, threshold: int, area_ha_approx: float, payload: dict, content_hash: str):
-        # Tier 1: block on L13 cover
-        matched_geo_ids = Utils.fetch_geo_ids_for_cell_tokens(db, indices[13])
-        
-        # Tier 2 & 3: fine IoU on L20 covers
-        matches = Utils.check_percentage_match(db, matched_geo_ids, indices[20], 20, threshold, area_ha_approx)
+        """Resolve a new cover against existing fields, or report it as new.
+
+        Compares on the canonical v2 cover when the caller supplied one, and on
+        the fixed L20 index otherwise. Blocking stays at L13 either way: identity
+        is the fine cover, and L13 is only the candidate pre-filter that the
+        existing s2_cells index already supports.
+        """
+        probe = indices.get(geoid_v2.COVER_KEY) or indices[20]
+        blocking = (
+            geoid_v2.blocking_key(probe)
+            if geoid_v2.COVER_KEY in indices
+            else indices[13]
+        )
+
+        matched_geo_ids = Utils.fetch_geo_ids_for_cell_tokens(db, blocking)
+        matches = Utils.check_percentage_match(db, matched_geo_ids, probe, 20, threshold, area_ha_approx)
         
         if matches["same_as"]:
             # Resolve to earliest

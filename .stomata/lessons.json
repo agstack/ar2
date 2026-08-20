@@ -1,0 +1,118 @@
+{
+  "$stomata_artifact": "lessons_ledger",
+  "schema_version": "1.0.0",
+  "promotion_threshold": 2,
+  "note": "Seeded 2026-08-19 from the review record of 2026-07-24 to 2026-08-19. Occurrences are things that actually happened and cost time, each traceable to a dated review document in the agstack workplan. Nothing speculative is recorded here: a lesson with no incident behind it becomes noise, and noise is what discredits the checks that were earned.",
+  "lessons": [
+    {
+      "recurrence_key": "gate-reports-green-while-blind",
+      "trigger": "A check, test or assertion reports success.",
+      "directive": "Establish that it can fail. Show it failing on purpose, or show the count it produces changing when the underlying thing changes. A gate that cannot distinguish good from bad is worse than no gate, because it is believed.",
+      "kind": "mechanized",
+      "enforced_by": [
+        "harness/stomata/checks.py",
+        "harness/tests/test_stomata.py"
+      ],
+      "occurrences": [
+        {"date": "2026-07-24", "what": "Tier 1 privacy was satisfied only vacuously: no holder_account could leak because no identity was ever produced.", "where": "workplan/2026-07/rajat_ar2_traceforward_20260724.md:221"},
+        {"date": "2026-08-05", "what": "The Tier 1 privacy test passed vacuously while Tier 1 still emitted the field.", "where": "workplan/2026-08/rajat_day3_review_20260805.md:271"},
+        {"date": "2026-08-06", "what": "The Tier 1 assertion could pass in isolation regardless of behaviour.", "where": "workplan/2026-08/rajat_day35_review_20260806.md:65"},
+        {"date": "2026-08-10", "what": "A cross-layer test was skipped in Pancake CI and the suite still reported green.", "where": "workplan/2026-08/rajat_day5_closeout_20260810.md"},
+        {"date": "2026-08-18", "what": "The schema drift guard passed while comparing nothing, because the mirror it compared against had been made permissive.", "where": "workplan/2026-08/rajat_import_review_20260818.md"},
+        {"date": "2026-08-18", "what": "The dirty-tree warning fired on every single run because generated credentials were rewritten each time, so it stopped carrying information.", "where": "app/tests/testkit/mint_test_authority_credentials.py"},
+        {"date": "2026-08-19", "what": "The lint ratchet counted ruff's success banner as a violation, so it reported 1 whatever the code said, and a real count of 36 rode in unnoticed across four commits.", "where": "harness/stomata/run.py"}
+      ]
+    },
+    {
+      "recurrence_key": "twin-divergence",
+      "trigger": "One fact is represented in two places -- a mirror and the system it mirrors, a function and its caller, the same logic in two packages, a value in two config files.",
+      "directive": "Change both in the same commit, and add a test that fails when they disagree. Do not rely on remembering the second one, because the second one is what gets forgotten.",
+      "kind": "mechanized",
+      "enforced_by": [
+        "migration/tests/test_schema_drift.py::test_mirrored_constraints_match_the_real_schema",
+        "migration/tests/test_points_are_importable.py",
+        "stomata.json"
+      ],
+      "occurrences": [
+        {"date": "2026-08-12", "what": "get_boundary_coverage was correct and had been called from nowhere since AR 1.0.", "where": "workplan/2026-08/rajat_e2e_ci_audit_20260812.md"},
+        {"date": "2026-08-14", "what": "v2 GeoID minting was fully implemented and no service path called it.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"},
+        {"date": "2026-08-14", "what": "GeoIDRegimeAlias rows were written by the migration and never read by the equivalence-set query.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"},
+        {"date": "2026-08-18", "what": "The point-handling path existed in app/geoid_v2.py and was absent from migration/geoid_v2.py, so every pin was quarantined.", "where": "migration/geoid_v2.py"},
+        {"date": "2026-08-19", "what": "The phone constraint was relaxed in the migration mirror and not in the hub it mirrors, so the import reported 0 rejections where the real system would have rejected 85.", "where": "workplan/2026-08/rajat_final_import_review_20260819.md"},
+        {"date": "2026-08-19", "what": "ruff was pinned in ci.yml and left unpinned in stomata.yml, so the gating workflow measured a different thing to the advisory one.", "where": ".github/workflows/stomata.yml"}
+      ]
+    },
+    {
+      "recurrence_key": "label-diverges-from-outcome",
+      "trigger": "You are naming or counting what a run did, in a report, a log line, a status field or a document.",
+      "directive": "Make the word mean one outcome. If a category can contain both a success and a failure, split it. Assert that the categories sum to the total and do not overlap, because every individual number can be computed correctly and the totals still describe a run that did not happen.",
+      "kind": "mechanized",
+      "enforced_by": [
+        "migration/tests/test_report_arithmetic.py"
+      ],
+      "occurrences": [
+        {"date": "2026-08-14", "what": "TRACEABILITY.md documented Tiers 2 and 4 as implemented when they were not.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"},
+        {"date": "2026-08-19", "what": "268 duplicate submissions that were correctly aliased to existing GeoIDs were reported as quarantined and as decisions required. Nothing had failed.", "where": "migration/run.py"},
+        {"date": "2026-08-19", "what": "18,184 geometries were reported as altered by canonicalisation; the real figure was 3,597, the rest being points on a different code path that set the flag as a side effect.", "where": "migration/pipeline.py"},
+        {"date": "2026-08-19", "what": "The point count, the single most consequential fact about the run, did not appear in the report at all.", "where": "migration/run.py"},
+        {"date": "2026-08-19", "what": "resolved_child_of was presented as a peer of imported_new when it is a subset, so 74 fields summed to 75 and read as one field processed twice.", "where": "migration/tests/test_report_arithmetic.py"}
+      ]
+    },
+    {
+      "recurrence_key": "claim-not-in-the-evidence",
+      "trigger": "You are about to quote a number, or cite a run, screenshot or log as evidence.",
+      "directive": "Open the artifact and find the number in it. Cite the run that produced it, at the commit under review. A figure that cannot be located in the evidence is a recollection, and recollections drift toward what we hoped.",
+      "kind": "mechanized",
+      "enforced_by": [
+        "harness/stomata/packet.py",
+        "harness/tests/test_stomata.py"
+      ],
+      "occurrences": [
+        {"date": "2026-08-14", "what": "Screenshots showed 2 fieldlists as though that were the corpus; it was an artifact of a --limit flag on the run.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"},
+        {"date": "2026-08-18", "what": "A packet cited packets/evidence/schema1.log, which did not exist, and bias_curve.csv, which was at the repository root.", "where": "packets/schema.json"},
+        {"date": "2026-08-18", "what": "'The missing 13,343' was stated in prose and appeared nowhere in the run it described.", "where": "workplan/2026-08/rajat_import_review_20260818.md"},
+        {"date": "2026-08-19", "what": "A summary quoted a pre-fix reconciliation of 13,658 + 14,594 + 30 while the attached log showed 27,978 + 275 + 29.", "where": "packets/evidence/import-output.txt"}
+      ]
+    },
+    {
+      "recurrence_key": "guard-weakened-to-pass",
+      "trigger": "A guard, assertion or lint rule stands between you and a change you believe is correct.",
+      "directive": "Change the claim or change the code, never quietly narrow the guard. If the guard is genuinely stale, say so in the commit message and re-record the baseline, so that weakening it costs a sentence someone can read.",
+      "kind": "mechanized",
+      "enforced_by": [
+        "harness/stomata/checks.py",
+        "harness/tests/test_lessons.py::test_removing_an_assertion_from_a_guard_fails"
+      ],
+      "occurrences": [
+        {"date": "2026-08-12", "what": "ruff.toml's ignore list was suppressing rule families including B008, so the linter was configured not to see real defects.", "where": "workplan/2026-08/rajat_e2e_ci_audit_20260812.md"},
+        {"date": "2026-08-19", "what": "The phone column was removed from the drift guard's NOT NULL and UNIQUE lists so a change would pass, and the guard then certified an import that could not work.", "where": "migration/tests/test_schema_drift.py"}
+      ]
+    },
+    {
+      "recurrence_key": "prose-warning-instead-of-a-check",
+      "trigger": "You have identified a failure mode and are about to write it down in a document, review comment or email.",
+      "directive": "Write the check as well, in the same change, or record explicitly that it cannot be mechanized and why. A paragraph is read once by whoever was in the conversation and then archived; it does not bind the person who arrives next, and it does not bind its own author a week later.",
+      "kind": "mechanized",
+      "enforced_by": [
+        "harness/stomata/lessons.py",
+        "harness/stomata/checks.py",
+        "harness/tests/test_lessons.py"
+      ],
+      "occurrences": [
+        {"date": "2026-08-13", "what": "Threshold guidance was written as prose reasoning; it rested on an IoU implementation that turned out to be wrong, and the prose gave no way to notice.", "where": "workplan/superseded/rajat_geoid_v2_review_20260813.md"},
+        {"date": "2026-08-14", "what": "A document asked, in words, that checks not be waived silently. Five days later a guard was edited to pass and nothing objected.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md:406"},
+        {"date": "2026-08-14", "what": "The same document predicted that a check which becomes noise 'gets waived, then gets deleted'. Two checks became noise and were ignored for days by the author who wrote that sentence.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md:418"}
+      ]
+    },
+    {
+      "recurrence_key": "run-record-not-at-the-reviewed-commit",
+      "trigger": "You are reading a run record, CI result or packet to decide whether a branch is sound.",
+      "directive": "Check the commit the run was taken at against the tip being reviewed. Commits after the last recorded run are ungated, and that is exactly where an unnoticed regression sits.",
+      "kind": "advisory",
+      "advisory_because": "One occurrence so far, and the commit-binding check already records the commit for a reader to compare. Promoting on a single incident manufactures the kind of speculative check that turns into noise. Revisit on the next occurrence.",
+      "occurrences": [
+        {"date": "2026-08-18", "what": "Run records sat at b3c55ed and ac6e536 while the branch tip was 17d3aaf, and a lint regression rode in on the four ungated commits between.", "where": "workplan/2026-08/rajat_import_review_20260818.md"}
+      ]
+    }
+  ]
+}

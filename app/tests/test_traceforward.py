@@ -265,8 +265,9 @@ def test_gate_b_owner_path_passes_without_identities():
     SEED = create_test_geoid(["111"])
     db = SessionLocal()
     from app.models.geo_id_model import ListArtifact, ListMemberEdge
-    db.add(ListArtifact(list_id="dummy-list"))
-    db.add(ListMemberEdge(geoid=SEED, list_id="dummy-list"))
+    list_id = f"dummy-list-{uuid.uuid4()}"
+    db.add(ListArtifact(list_id=list_id))
+    db.add(ListMemberEdge(geoid=SEED, list_id=list_id))
     db.commit()
     r = client.post("/traceforward", json={"seed_geoid": SEED, "scope": "demo-recall"},
                     headers={"X-Grant-Token": valid_grant_for(SEED)})

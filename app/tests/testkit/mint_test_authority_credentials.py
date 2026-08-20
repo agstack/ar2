@@ -42,6 +42,24 @@ def generate_keypair_pem():
     )
     return private_pem
 
+def _still_valid(path: Path, min_remaining_s: int = 24 * 3600) -> bool:
+    """True if this credential exists and will not expire during the run.
+
+    Read without verifying: the point is the expiry, and the file is a test
+    fixture this module minted itself. Anything unreadable is treated as absent
+    and re-minted, so a corrupt fixture repairs itself rather than failing the
+    suite with a confusing error somewhere else.
+    """
+    if not path.exists():
+        return False
+    try:
+        token = path.read_text().rstrip("~")
+        claims = jwt.decode(token, options={"verify_signature": False, "verify_exp": False})
+        return claims.get("exp", 0) > time.time() + min_remaining_s
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def mint_authority(out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     
@@ -60,9 +78,22 @@ def mint_authority(out_dir: Path):
     }
     
     for name, claims in creds.items():
+        target = out_dir / f"{name}.sdjwt"
+
+        # Only mint what is missing or no longer usable. These files are tracked
+        # -- scripts/e2e_traceforward.sh reads them without running pytest first
+        # -- and conftest calls this on every test run, so rewriting them
+        # unconditionally left the working tree modified after any run. That made
+        # the harness report every result as coming from a dirty tree, which is
+        # the signal that a result cannot be reproduced from a revision. A
+        # warning that fires every single time is one people learn to skip past,
+        # so it has to fire only when something is actually uncommitted.
+        if name != "expired_authority" and _still_valid(target):
+            continue
+
         key = private_pem if name != "untrusted_authority" else generate_keypair_pem()
         token = jwt.encode(claims, key, algorithm="EdDSA", headers={"typ": "vc+sd-jwt", "kid": "pancake-test-1"})
-        (out_dir / f"{name}.sdjwt").write_text(f"{token}~")
+        target.write_text(f"{token}~")
 
     # revoked_authority: set bit 3 in the test status list (owner tests use 7)
     write_status_list(out_dir, revoked_indices=[3, 7])

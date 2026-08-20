@@ -61,3 +61,8 @@ generate_synthetic_geojson.py
 demo_guide_local.md
 test_curls_local.txt
 manual_e2e_testing_guide.md
+# The last stomata run. Local, and regenerated on every run, which is why a
+# review packet carries a COPY of it under packets/ rather than pointing here --
+# a pointer to this path resolves only on the machine that produced it.
+# .stomata/baseline.json IS tracked: it is the shared ratchet.
+.stomata/state.json

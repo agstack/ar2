@@ -1,0 +1,45 @@
+{
+  "$stomata_artifact": "review_packet",
+  "schema_version": "1.0.0",
+  "title": "AR1 import against real sources",
+  "author": "Rajat",
+  "reviewer": "Sumer",
+  "produced_at": "2026-08-18T06:53:00+00:00",
+  "change": {
+    "summary": "Import ran against full AR1 and TerraPipe database. Collision count: 20,171 (Line 9). Missing geometry: 0 completely missing, but 51.59% (14,591/28,282) zero/invalid area (Line 14). Resolution distribution for all 28,282 fields: 13,348 distinct (13,658 new [Line 37] - 310 child_of [Line 38]), 310 child_of (Line 38), 30 same_as (Line 39).",
+    "commits": [
+      "ac6e536703e5f51d24852ea08a832fbcfd349e8f"
+    ],
+    "paths": []
+  },
+  "evidence": [
+    {
+      "type": "harness_state",
+      "claim": "Harness run at 2026-08-18T05:55:54+00:00: ar2 119/119, migration 85/85; all checks passed.",
+      "pointer": {
+        "path": "packets/import.run.json",
+        "command": "harness/bin/stomata run --full",
+        "commit": "ac6e536703e5f51d24852ea08a832fbcfd349e8f"
+      },
+      "captured_at": "2026-08-18T05:55:54+00:00"
+    },
+    {
+      "type": "log_excerpt",
+      "claim": "Full run.py output without --limit.",
+      "pointer": {
+        "path": "packets/evidence/import-output.txt"
+      },
+      "captured_at": "2026-08-18T06:53:00+00:00"
+    }
+  ],
+  "gaps": [],
+  "decision": {
+    "question": "Are these full database distributions acceptable to proceed?",
+    "options": [
+      "merge as is",
+      "change X first"
+    ],
+    "recommendation": "merge as is",
+    "requested_of": "Sumer"
+  }
+}
