@@ -160,3 +160,68 @@ def test_area_is_derived_so_the_inventory_bands_mean_something():
     measured = g2.area_ha(square)
     assert measured == pytest.approx(100.0, rel=0.01), measured
     assert g2.area_ha(PIN_WKT) is None, "a pin has no area and must not report 0"
+
+
+# ---------------------------------------------------------------------------
+# what the report says happened
+# ---------------------------------------------------------------------------
+
+def test_an_exact_duplicate_counts_as_resolved_not_rejected():
+    """A duplicate that resolved correctly must not be reported as a problem.
+
+    Identical canonical geometry aliases to the existing row, and the v1
+    identifier keeps resolving. Nothing is lost and nothing is pending. It was
+    filed under quarantined, which put 268 of a 28,282-field run into a bucket
+    the report then listed as needing a policy decision -- making a run that
+    rejected 7 fields read as a run with 275 open problems. A reader acts on the
+    label, so the label has to be true.
+    """
+    report = _run(FIELD_WKT, FIELD_WKT)
+
+    assert report.quarantined_total == 0, (
+        f"a resolved duplicate was reported as rejected: {report.quarantined}")
+    assert report.resolved_same_as == 1
+    assert report.resolved_by_content_hash == 1
+
+
+def test_exact_matches_are_distinguishable_from_threshold_matches():
+    """Certainty and judgement should not share a number.
+
+    An exact content match cannot change. A threshold match is a decision that a
+    different threshold would make differently, and only the second is worth
+    revisiting when the threshold is questioned.
+    """
+    report = _run(FIELD_WKT, FIELD_WKT)
+
+    assert report.resolved_by_content_hash <= report.resolved_same_as
+    threshold_matches = report.resolved_same_as - report.resolved_by_content_hash
+    assert threshold_matches == 0, (
+        f"identical geometry was scored as a threshold match: {threshold_matches}")
+
+
+def test_a_point_is_not_counted_as_altered_geometry():
+    """A pin has no boundary to repair, so the question does not apply to it.
+
+    Asking anyway counted every one of 14,587 imported pins as altered geometry,
+    moving the reported figure from 3,597 to 18,184 and converting a real signal
+    about boundary repair into a headcount of points.
+    """
+    report = _run(PIN_WKT, PIN_AS_RING, PIN_AS_SEGMENT)
+
+    assert report.imported_points == 3
+    assert len(report.canonicalization_changed) == 0, (
+        f"points were counted as altered boundaries: "
+        f"{report.canonicalization_changed}")
+
+
+def test_the_point_count_is_reported_at_all():
+    """A registry that is half pins is a different thing to plan around.
+
+    The total hides which it is, and on the first full run this was the single
+    most consequential fact and appeared nowhere in the output.
+    """
+    report = _run(PIN_WKT, FIELD_WKT)
+
+    assert hasattr(report, "imported_points")
+    assert report.imported_points == 1
+    assert report.imported_new == 2

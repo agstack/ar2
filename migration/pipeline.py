@@ -73,6 +73,16 @@ class FieldReport:
     # plan around than one that is all fields, and the total hides that.
     imported_points: int = 0
     resolved_same_as: int = 0
+    # Of resolved_same_as, how many matched on an identical canonical geometry
+    # rather than on overlap above the threshold. Reported separately because the
+    # two mean different things: an exact content match is certainty, a
+    # threshold match is a judgement that the threshold could change.
+    resolved_by_content_hash: int = 0
+    # A SUBSET of imported_new, not a peer of it. A child field is a genuinely new
+    # GeoID that additionally records a parent link, so it is counted in both.
+    # Listing it alongside imported_new made the categories sum to more than
+    # considered, which reads as a field processed twice; see
+    # migration/tests/test_report_arithmetic.py.
     resolved_child_of: int = 0
     skipped_already_done: int = 0
     quarantined: dict[str, list[str]] = field(default_factory=dict)
@@ -163,7 +173,12 @@ def import_fields(
                     f"{QUARANTINE_UNUSABLE}:{_reason_of(exc)}", legacy.v1_geo_id)
                 continue
 
-        if _canonicalization_altered(legacy.wkt):
+        # Polygons only. A point has no boundary to repair, so asking whether
+        # canonicalization altered it is not a meaningful question -- and asking
+        # it anyway counted every one of the 14,587 imported pins as altered
+        # geometry, taking the reported figure from 3,597 to 18,184 and turning a
+        # real signal about boundary repair into a headcount of points.
+        if position is None and _canonicalization_altered(legacy.wkt):
             report.canonicalization_changed.append(legacy.v1_geo_id)
 
         # genuinely new (or nested, which still registers)
@@ -172,7 +187,17 @@ def import_fields(
             # Identical canonical geometry already registered. content_hash is
             # UNIQUE in ar2, so this cannot be inserted -- alias to the existing
             # row instead of failing the run.
-            report.quarantine(QUARANTINE_DUPLICATE_CONTENT, legacy.v1_geo_id)
+            #
+            # Counted as a resolution, not a quarantine. It used to be filed under
+            # quarantined, which put 268 of a 28,282-field run into a bucket the
+            # report then listed as needing a policy decision -- when every one of
+            # them had in fact resolved correctly and its v1 identifier still
+            # resolves through the alias written on the next line. Nothing was
+            # lost and nothing was pending. The label said otherwise, and the
+            # label is what a reader acts on: it made a run that rejected 7 fields
+            # look like a run with 275 open problems.
+            report.resolved_same_as += 1
+            report.resolved_by_content_hash += 1
             if not dry_run:
                 repo.upsert_alias(AliasRow(legacy.v1_geo_id, existing.geo_id,
                                            legacy.v1_kind, SAME_AS))
