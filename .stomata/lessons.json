@@ -20,7 +20,8 @@
         {"date": "2026-08-10", "what": "A cross-layer test was skipped in Pancake CI and the suite still reported green.", "where": "workplan/2026-08/rajat_day5_closeout_20260810.md"},
         {"date": "2026-08-18", "what": "The schema drift guard passed while comparing nothing, because the mirror it compared against had been made permissive.", "where": "workplan/2026-08/rajat_import_review_20260818.md"},
         {"date": "2026-08-18", "what": "The dirty-tree warning fired on every single run because generated credentials were rewritten each time, so it stopped carrying information.", "where": "app/tests/testkit/mint_test_authority_credentials.py"},
-        {"date": "2026-08-19", "what": "The lint ratchet counted ruff's success banner as a violation, so it reported 1 whatever the code said, and a real count of 36 rode in unnoticed across four commits.", "where": "harness/stomata/run.py"}
+        {"date": "2026-08-19", "what": "The lint ratchet counted ruff's success banner as a violation, so it reported 1 whatever the code said, and a real count of 36 rode in unnoticed across four commits.", "where": "harness/stomata/run.py"},
+        {"date": "2026-08-26", "what": "All committed grant fixtures expired on 2026-08-20 (30-day mint window). The tamper/revocation/wrong-geoid tests kept passing for six days -- the verifier rejected the credentials for expiry, not the property under test -- while a conftest docstring claimed there was no expiry cliff.", "where": "app/tests/conftest.py"}
       ]
     },
     {
