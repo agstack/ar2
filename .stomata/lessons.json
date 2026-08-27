@@ -105,6 +105,20 @@
       ]
     },
     {
+      "recurrence_key": "license-posture-unchecked",
+      "trigger": "You are adding, editing or citing a LICENSE file, a license declaration in prose, or a per-file license header.",
+      "directive": "Pin the license file to the canonical text by hash and check every source file for its header in CI. A license is a control that binds outsiders, and it fails silently: a truncated file or a prose-only declaration looks licensed to everyone who does not read it end to end.",
+      "kind": "mechanized",
+      "enforced_by": [
+        "scripts/license_check.sh",
+        ".github/workflows/ci.yml"
+      ],
+      "occurrences": [
+        {"date": "2026-08-26", "what": "LICENSE in ar2 and ar2-hub was the first 134 lines of MPL-2.0, cut mid-sentence in section 2.4 -- the copyleft core and exhibits were absent, and GitHub reported NOASSERTION. Nothing had ever checked it.", "where": "workplan/2026-08/core_license_posture_20260826.md"},
+        {"date": "2026-08-26", "what": "pancake had no LICENSE file at all while GOVERNANCE.md line 5 declared Apache 2.0 in prose, a permissive license contradicting the copyleft intent.", "where": "workplan/2026-08/core_license_posture_20260826.md"}
+      ]
+    },
+    {
       "recurrence_key": "run-record-not-at-the-reviewed-commit",
       "trigger": "You are reading a run record, CI result or packet to decide whether a branch is sound.",
       "directive": "Check the commit the run was taken at against the tip being reviewed. Commits after the last recorded run are ungated, and that is exactly where an unnoticed regression sits.",

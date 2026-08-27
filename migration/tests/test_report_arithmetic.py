@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: EUPL-1.2
+# Copyright (c) 2026 AgStack project contributors.
+# Licensed under the EUPL, Version 1.2; see the LICENSE file for the full text.
+
 """The report's categories must add up, and must not overlap.
 
 THE INCIDENT. On 2026-08-19 an import run reported 268 fields quarantined and 268

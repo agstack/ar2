@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: EUPL-1.2
+# Copyright (c) 2026 AgStack project contributors.
+# Licensed under the EUPL, Version 1.2; see the LICENSE file for the full text.
+
 """GeoID v2: content-derived field identity, and area-exact comparison of covers.
 
 The regime, per doc/current/dpi_architecture_20260812.md S10:

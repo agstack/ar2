@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: EUPL-1.2
+# Copyright (c) 2026 AgStack project contributors.
+# Licensed under the EUPL, Version 1.2; see the LICENSE file for the full text.
+
 """--limit truncates fields only, so every join figure it produces is an artifact.
 
 `run.py` passes `--limit` to `import_fields` but not to `import_profiles`. Every
