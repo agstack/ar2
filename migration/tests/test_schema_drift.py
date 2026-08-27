@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: EUPL-1.2
+# Copyright (c) 2026 AgStack project contributors.
+# Licensed under the EUPL, Version 1.2; see the LICENSE file for the full text.
+
 """
 Drift guard: models.py mirrors the shipped schemas rather than importing them,
 so something has to notice when the real ones change.
