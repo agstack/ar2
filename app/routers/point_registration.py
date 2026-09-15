@@ -22,6 +22,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app import geoid_v2
 from app.auth import require_hub_user
 from app.database import get_db
 from app.models import GeoID
@@ -48,9 +49,13 @@ async def register_point(
         if not field_name:
             field_name = f"point_{random.randint(1000, 9999)}"
             
-        # points have exactly 0 area
-        area_ha = 0.0 
-        
+        # A point has no area of its own; the registrant declares the plot's, and
+        # the regulation caps what a single point may stand for at four hectares.
+        try:
+            area_ha = geoid_v2.point_area_declared(payload.declared_area_ha)
+        except geoid_v2.GeometryUnusable as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
         point_geo_json = Utils.get_geo_json(point_wkt)
         lng = point_geo_json['geometry']['coordinates'][0]
         lat = point_geo_json['geometry']['coordinates'][1]
@@ -79,8 +84,13 @@ async def register_point(
             30: S2Service.wkt_to_cell_tokens(point_wkt, 30, point=True)
         }
 
-        geo_id = Utils.generate_geo_id(indices[30])
-        geo_id_l20 = Utils.generate_geo_id(indices[20])
+        # The identity is the v2 point regime: the level-20 cell the fix lands in,
+        # so a re-registration a few metres off converges on the same name. The
+        # per-level tokens above are kept for the s2_cells index as before.
+        v2_tokens, geo_id = geoid_v2.point_geo_id_with_tokens(lat, lng)
+        indices[geoid_v2.COVER_KEY] = v2_tokens
+        indices[geoid_v2.REGIME_KEY] = geoid_v2.REGIME_VERSION
+        geo_id_l20 = geo_id
         geo_id_short = GeoDataUtils.generate_short_geo_id(geo_id)
         records_list = Utils.records_s2_cell_tokens(indices)
 
@@ -327,7 +337,7 @@ async def register_points_geojson(
                 if not field_name:
                     field_name = f"point_{random.randint(1000, 9999)}"
                 
-                area_ha = 0.0
+                area_ha = geoid_v2.point_area_declared(properties.get('declared_area_ha'))
 
                 content_hash = GeoDataUtils.generate_content_hash(point_wkt)
                 existing_record = db.query(GeoID).filter(GeoID.content_hash == content_hash).first()
@@ -359,8 +369,10 @@ async def register_points_geojson(
                     30: S2Service.wkt_to_cell_tokens(point_wkt, 30, point=True),
                 }
 
-                geo_id = Utils.generate_geo_id(indices[30])
-                geo_id_l20 = Utils.generate_geo_id(indices[20])
+                v2_tokens, geo_id = geoid_v2.point_geo_id_with_tokens(lat, lng)
+                indices[geoid_v2.COVER_KEY] = v2_tokens
+                indices[geoid_v2.REGIME_KEY] = geoid_v2.REGIME_VERSION
+                geo_id_l20 = geo_id
                 geo_id_short = GeoDataUtils.generate_short_geo_id(geo_id)
                 records_list = Utils.records_s2_cell_tokens(indices)
                 

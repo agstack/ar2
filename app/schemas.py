@@ -22,6 +22,13 @@ class PointRegistrationRequest(BaseModel):
     wkt: str = Field(..., description="WKT geometry of the point")
     s2_index: str | None = Field(default=None, description="Comma separated S2 levels to fetch")
     field_name: str | None = Field(default=None, description="Optional name for the point")
+    declared_area_ha: float | None = Field(
+        default=None,
+        description=(
+            "Area of the plot this point stands for, in hectares. A single point may describe a "
+            "plot of at most 4 ha (Regulation (EU) 2023/1115 Art. 2(28)); larger plots need a polygon."
+        ),
+    )
 
 class FieldRegistrationResponse(BaseModel):
     message: str

@@ -218,20 +218,60 @@ def content_hash(wkt_string: str) -> str:
 # points
 # --------------------------------------------------------------------------
 
-def point_geo_id_with_tokens(lat: float, lng: float) -> tuple[list[str], str]:
-    """Identity for a point registration: the single leaf cell containing it.
+POINT_LEVEL = 20
+"""The cell a point is quantized to before it is named: level 20, about 8 m on a
+side in Honduras, roughly a handheld GPS fix's error.
 
-    A point has no area, so the polygon coverer cannot be used. Hashing its leaf
-    cell keeps the identity content-derived and deterministic, and keeps points
-    and fields in one namespace: the leaf cell of a point inside a field is a
-    descendant of that field's cover, so the existing ancestor probe relates
-    them without a special case.
+Until 2026-09-15 a point was named by its level-30 leaf cell, about 1 cm. That
+is content-derived, but it is not an identity: two fixes of the same tree taken
+a minute apart land in different leaf cells and get different names, and there
+is no IoU to resolve them because a point has no area. Quantizing to the cell a
+fix cannot reliably leave makes re-registration converge the way a re-survey of
+a polygon converges through IoU. Two points inside one 8 m cell are one plot to
+this registry, which is the intended reading for a smallholding declared by a
+single coordinate under Regulation (EU) 2023/1115 Article 2(28)."""
+
+POINT_MAX_AREA_HA = 4.0
+"""Regulation (EU) 2023/1115 Article 2(28): a plot of land of at most four
+hectares may be described by a single point. Above that the regulation wants a
+polygon, and so does this registry."""
+
+
+def point_geo_id_with_tokens(lat: float, lng: float) -> tuple[list[str], str]:
+    """Identity for a point registration: the level-20 cell containing it.
+
+    A point has no area, so the polygon coverer cannot be used. Hashing the
+    quantized cell keeps the identity content-derived and deterministic, and
+    keeps points and fields in one namespace: the cell of a point inside a field
+    is a descendant of (or equal to) a cell in that field's cover, so the
+    existing ancestor probe relates them without a special case.
     """
     # The S2CellId constructor takes an S2LatLng and yields a leaf cell directly;
     # these bindings expose no FromLatLng classmethod.
-    cell = s2g.S2CellId(s2g.S2LatLng.FromDegrees(lat, lng))
+    leaf = s2g.S2CellId(s2g.S2LatLng.FromDegrees(lat, lng))
+    cell = leaf.parent(POINT_LEVEL)
     tokens = [cell.ToToken()]
     return tokens, hashlib.sha256(tokens[0].encode()).hexdigest()
+
+
+def point_area_declared(area_ha: float | None) -> float:
+    """Validate the area a point registration declares for the plot it stands for.
+
+    A point carries no area of its own, so the registrant declares one. Zero or
+    None is accepted (the AR1 behaviour: an area not stated), but a declaration
+    above the regulation's four hectares is refused, because that plot needs a
+    polygon and a point for it would be a claim this registry cannot check.
+    """
+    if area_ha is None:
+        return 0.0
+    if area_ha < 0:
+        raise GeometryUnusable("declared area cannot be negative")
+    if area_ha > POINT_MAX_AREA_HA:
+        raise GeometryUnusable(
+            f"a point may stand for a plot of at most {POINT_MAX_AREA_HA:g} ha "
+            f"(Regulation (EU) 2023/1115 Art. 2(28)); {area_ha:g} ha needs a polygon"
+        )
+    return float(area_ha)
 
 
 # --------------------------------------------------------------------------
