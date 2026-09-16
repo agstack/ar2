@@ -64,7 +64,8 @@
       "enforced_by": [
         "migration/tests/test_schema_drift.py::test_mirrored_constraints_match_the_real_schema",
         "migration/tests/test_points_are_importable.py",
-        "stomata.json"
+        "stomata.json",
+        "app/tests/test_point_polygon_peers.py::test_a_point_in_an_upload_is_the_same_plot_as_the_same_point_sent_alone"
       ],
       "occurrences": [
         {
@@ -101,6 +102,11 @@
           "date": "2026-09-15",
           "what": "3aa3514 moved point naming to the level-20 cell in app/geoid_v2.py and left migration/geoid_v2.py naming by the leaf, so the API and the importer would have minted two identities for one pin. The test that pins them, migration/tests/test_points_are_importable.py::test_the_two_implementations_agree_on_points, was already in the repository and already fired -- in CI, 36 minutes after the push.",
           "where": "migration/geoid_v2.py; AR2 CI run 35037684619"
+        },
+        {
+          "date": "2026-09-15",
+          "what": "Registering a point was implemented twice. /register-point recorded the declared area, wrote geometry_kind and resolved a re-survey by distance; the Point branch of /register-field-boundaries-geojson did none of the three, so the same farm got a different kind of plot depending on whether it arrived alone or in an upload. The bulk branch even carried a comment explaining that points get no resolution pass, which had been true of the single path that morning.",
+          "where": "app/routers/field_registration.py"
         }
       ]
     },
