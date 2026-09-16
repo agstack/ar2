@@ -56,7 +56,8 @@ Follow these steps to run the Node locally alongside the `ar2-hub` and `Pancake`
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
 | `POST` | `/register-field-boundary` | Registers a single WKT geometry. | Yes (Hub JWT) |
-| `POST` | `/register-field-boundaries-geojson` | Bulk registers from a GeoJSON feature collection. | Yes (Hub JWT) |
+| `POST` | `/register-field-boundaries-geojson` | Bulk registers from a GeoJSON feature collection. Point features take the point path below. | Yes (Hub JWT) |
+| `POST` | `/register-point` | Registers a plot declared by one coordinate, with the area it stands for (`declared_area_ha`, at most 4). | Yes (Hub JWT) |
 | `POST` | `/register-points-geojson` | Bulk registers points. | Yes (Hub JWT) |
 | `GET`  | `/resolve/{geoid}` | Returns L0 masked data (S2 indices / Bounding Box) for a GeoID. | No |
 | `GET`  | `/fetch-field-wkt/{geoid}` | Returns L1 high-resolution geometry. | Yes (Grant) |
@@ -68,6 +69,38 @@ Follow these steps to run the Node locally alongside the `ar2-hub` and `Pancake`
 | `GET`  | `/list-artifact/reverse/{geoid}` | Trace-forward: every list/region containing a GeoID, climbed recursively to terminal products. | Yes (Hub JWT + `trace-forward` capability + seed authorization; accredited authority credential for the identity tier) |
 
 See [TRACEABILITY.md](./TRACEABILITY.md) for how these endpoints compose into trace-back and trace-forward.
+
+## Two kinds of plot
+
+A plot reaches this registry as a **boundary** or as a **coordinate**, and the
+two are peers: same identifier shape, same resolution behaviour, same masking
+tiers, same consent flow, same EU filing route. Regulation (EU) 2023/1115
+Art. 2(28) allows a plot of at most four hectares to be declared by a single
+coordinate, and in the Honduran cooperative survey the median plot is 0.30 ha,
+so most plots qualify. A registry that treated coordinates as a lesser case
+would work for the farms that had been surveyed and not for the rest.
+
+|  | boundary | coordinate |
+|---|---|---|
+| named by | SHA-256 over its sorted S2 cover (levels 1–20) | SHA-256 over a one-cell cover of the leaf cell it lands in (level 30) |
+| identifier | 64 hex characters | 64 hex characters, indistinguishable |
+| re-submission resolves by | cover overlap (IoU) against the threshold | distance, within `POINT_SAME_AS_METRES` (10 m) |
+| area | computed from the boundary | declared by the registrant, capped at 4 ha |
+| L0 view | level-10 cell, country, area, `geometry_kind` | the same, with the declared area |
+| L1 view | the geometry, and `GeometryKind` / `AreaHa` | the coordinate, and the same two |
+| EU filing (`/geoid/{id}/eudr-export`) | MultiPolygon | Point with an `Area` property; refused if no area was declared |
+| list membership | any mix of the two in one ListID | the same |
+
+Both kinds are named by the same digest over the same kind of cover, which is
+why a `ListID` may mix them and why nothing downstream can branch on shape.
+
+`GeometryKind` and `AreaHa` are on the wire at **both** masking levels. A node
+entitled only to the masked view still has to know which kind of plot it is
+holding: screening a coordinate as though it were a boundary reads the single
+data cell containing the fix -- 36 m for the JRC deforestation layer -- and
+reports it as the plot. `app/tests/test_point_polygon_peers.py` runs one journey
+twice, once with each kind, and asserts the same answers everywhere except the
+two places they honestly differ.
 
 ## Testing
 
