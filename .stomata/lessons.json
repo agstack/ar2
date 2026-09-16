@@ -14,14 +14,46 @@
         "harness/tests/test_stomata.py"
       ],
       "occurrences": [
-        {"date": "2026-07-24", "what": "Tier 1 privacy was satisfied only vacuously: no holder_account could leak because no identity was ever produced.", "where": "workplan/2026-07/rajat_ar2_traceforward_20260724.md:221"},
-        {"date": "2026-08-05", "what": "The Tier 1 privacy test passed vacuously while Tier 1 still emitted the field.", "where": "workplan/2026-08/rajat_day3_review_20260805.md:271"},
-        {"date": "2026-08-06", "what": "The Tier 1 assertion could pass in isolation regardless of behaviour.", "where": "workplan/2026-08/rajat_day35_review_20260806.md:65"},
-        {"date": "2026-08-10", "what": "A cross-layer test was skipped in Pancake CI and the suite still reported green.", "where": "workplan/2026-08/rajat_day5_closeout_20260810.md"},
-        {"date": "2026-08-18", "what": "The schema drift guard passed while comparing nothing, because the mirror it compared against had been made permissive.", "where": "workplan/2026-08/rajat_import_review_20260818.md"},
-        {"date": "2026-08-18", "what": "The dirty-tree warning fired on every single run because generated credentials were rewritten each time, so it stopped carrying information.", "where": "app/tests/testkit/mint_test_authority_credentials.py"},
-        {"date": "2026-08-19", "what": "The lint ratchet counted ruff's success banner as a violation, so it reported 1 whatever the code said, and a real count of 36 rode in unnoticed across four commits.", "where": "harness/stomata/run.py"},
-        {"date": "2026-08-26", "what": "All committed grant fixtures expired on 2026-08-20 (30-day mint window). The tamper/revocation/wrong-geoid tests kept passing for six days -- the verifier rejected the credentials for expiry, not the property under test -- while a conftest docstring claimed there was no expiry cliff.", "where": "app/tests/conftest.py"}
+        {
+          "date": "2026-07-24",
+          "what": "Tier 1 privacy was satisfied only vacuously: no holder_account could leak because no identity was ever produced.",
+          "where": "workplan/2026-07/rajat_ar2_traceforward_20260724.md:221"
+        },
+        {
+          "date": "2026-08-05",
+          "what": "The Tier 1 privacy test passed vacuously while Tier 1 still emitted the field.",
+          "where": "workplan/2026-08/rajat_day3_review_20260805.md:271"
+        },
+        {
+          "date": "2026-08-06",
+          "what": "The Tier 1 assertion could pass in isolation regardless of behaviour.",
+          "where": "workplan/2026-08/rajat_day35_review_20260806.md:65"
+        },
+        {
+          "date": "2026-08-10",
+          "what": "A cross-layer test was skipped in Pancake CI and the suite still reported green.",
+          "where": "workplan/2026-08/rajat_day5_closeout_20260810.md"
+        },
+        {
+          "date": "2026-08-18",
+          "what": "The schema drift guard passed while comparing nothing, because the mirror it compared against had been made permissive.",
+          "where": "workplan/2026-08/rajat_import_review_20260818.md"
+        },
+        {
+          "date": "2026-08-18",
+          "what": "The dirty-tree warning fired on every single run because generated credentials were rewritten each time, so it stopped carrying information.",
+          "where": "app/tests/testkit/mint_test_authority_credentials.py"
+        },
+        {
+          "date": "2026-08-19",
+          "what": "The lint ratchet counted ruff's success banner as a violation, so it reported 1 whatever the code said, and a real count of 36 rode in unnoticed across four commits.",
+          "where": "harness/stomata/run.py"
+        },
+        {
+          "date": "2026-08-26",
+          "what": "All committed grant fixtures expired on 2026-08-20 (30-day mint window). The tamper/revocation/wrong-geoid tests kept passing for six days -- the verifier rejected the credentials for expiry, not the property under test -- while a conftest docstring claimed there was no expiry cliff.",
+          "where": "app/tests/conftest.py"
+        }
       ]
     },
     {
@@ -35,12 +67,41 @@
         "stomata.json"
       ],
       "occurrences": [
-        {"date": "2026-08-12", "what": "get_boundary_coverage was correct and had been called from nowhere since AR 1.0.", "where": "workplan/2026-08/rajat_e2e_ci_audit_20260812.md"},
-        {"date": "2026-08-14", "what": "v2 GeoID minting was fully implemented and no service path called it.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"},
-        {"date": "2026-08-14", "what": "GeoIDRegimeAlias rows were written by the migration and never read by the equivalence-set query.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"},
-        {"date": "2026-08-18", "what": "The point-handling path existed in app/geoid_v2.py and was absent from migration/geoid_v2.py, so every pin was quarantined.", "where": "migration/geoid_v2.py"},
-        {"date": "2026-08-19", "what": "The phone constraint was relaxed in the migration mirror and not in the hub it mirrors, so the import reported 0 rejections where the real system would have rejected 85.", "where": "workplan/2026-08/rajat_final_import_review_20260819.md"},
-        {"date": "2026-08-19", "what": "ruff was pinned in ci.yml and left unpinned in stomata.yml, so the gating workflow measured a different thing to the advisory one.", "where": ".github/workflows/stomata.yml"}
+        {
+          "date": "2026-08-12",
+          "what": "get_boundary_coverage was correct and had been called from nowhere since AR 1.0.",
+          "where": "workplan/2026-08/rajat_e2e_ci_audit_20260812.md"
+        },
+        {
+          "date": "2026-08-14",
+          "what": "v2 GeoID minting was fully implemented and no service path called it.",
+          "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"
+        },
+        {
+          "date": "2026-08-14",
+          "what": "GeoIDRegimeAlias rows were written by the migration and never read by the equivalence-set query.",
+          "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"
+        },
+        {
+          "date": "2026-08-18",
+          "what": "The point-handling path existed in app/geoid_v2.py and was absent from migration/geoid_v2.py, so every pin was quarantined.",
+          "where": "migration/geoid_v2.py"
+        },
+        {
+          "date": "2026-08-19",
+          "what": "The phone constraint was relaxed in the migration mirror and not in the hub it mirrors, so the import reported 0 rejections where the real system would have rejected 85.",
+          "where": "workplan/2026-08/rajat_final_import_review_20260819.md"
+        },
+        {
+          "date": "2026-08-19",
+          "what": "ruff was pinned in ci.yml and left unpinned in stomata.yml, so the gating workflow measured a different thing to the advisory one.",
+          "where": ".github/workflows/stomata.yml"
+        },
+        {
+          "date": "2026-09-15",
+          "what": "3aa3514 moved point naming to the level-20 cell in app/geoid_v2.py and left migration/geoid_v2.py naming by the leaf, so the API and the importer would have minted two identities for one pin. The test that pins them, migration/tests/test_points_are_importable.py::test_the_two_implementations_agree_on_points, was already in the repository and already fired -- in CI, 36 minutes after the push.",
+          "where": "migration/geoid_v2.py; AR2 CI run 35037684619"
+        }
       ]
     },
     {
@@ -52,11 +113,31 @@
         "migration/tests/test_report_arithmetic.py"
       ],
       "occurrences": [
-        {"date": "2026-08-14", "what": "TRACEABILITY.md documented Tiers 2 and 4 as implemented when they were not.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"},
-        {"date": "2026-08-19", "what": "268 duplicate submissions that were correctly aliased to existing GeoIDs were reported as quarantined and as decisions required. Nothing had failed.", "where": "migration/run.py"},
-        {"date": "2026-08-19", "what": "18,184 geometries were reported as altered by canonicalisation; the real figure was 3,597, the rest being points on a different code path that set the flag as a side effect.", "where": "migration/pipeline.py"},
-        {"date": "2026-08-19", "what": "The point count, the single most consequential fact about the run, did not appear in the report at all.", "where": "migration/run.py"},
-        {"date": "2026-08-19", "what": "resolved_child_of was presented as a peer of imported_new when it is a subset, so 74 fields summed to 75 and read as one field processed twice.", "where": "migration/tests/test_report_arithmetic.py"}
+        {
+          "date": "2026-08-14",
+          "what": "TRACEABILITY.md documented Tiers 2 and 4 as implemented when they were not.",
+          "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"
+        },
+        {
+          "date": "2026-08-19",
+          "what": "268 duplicate submissions that were correctly aliased to existing GeoIDs were reported as quarantined and as decisions required. Nothing had failed.",
+          "where": "migration/run.py"
+        },
+        {
+          "date": "2026-08-19",
+          "what": "18,184 geometries were reported as altered by canonicalisation; the real figure was 3,597, the rest being points on a different code path that set the flag as a side effect.",
+          "where": "migration/pipeline.py"
+        },
+        {
+          "date": "2026-08-19",
+          "what": "The point count, the single most consequential fact about the run, did not appear in the report at all.",
+          "where": "migration/run.py"
+        },
+        {
+          "date": "2026-08-19",
+          "what": "resolved_child_of was presented as a peer of imported_new when it is a subset, so 74 fields summed to 75 and read as one field processed twice.",
+          "where": "migration/tests/test_report_arithmetic.py"
+        }
       ]
     },
     {
@@ -69,10 +150,26 @@
         "harness/tests/test_stomata.py"
       ],
       "occurrences": [
-        {"date": "2026-08-14", "what": "Screenshots showed 2 fieldlists as though that were the corpus; it was an artifact of a --limit flag on the run.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"},
-        {"date": "2026-08-18", "what": "A packet cited packets/evidence/schema1.log, which did not exist, and bias_curve.csv, which was at the repository root.", "where": "packets/schema.json"},
-        {"date": "2026-08-18", "what": "'The missing 13,343' was stated in prose and appeared nowhere in the run it described.", "where": "workplan/2026-08/rajat_import_review_20260818.md"},
-        {"date": "2026-08-19", "what": "A summary quoted a pre-fix reconciliation of 13,658 + 14,594 + 30 while the attached log showed 27,978 + 275 + 29.", "where": "packets/evidence/import-output.txt"}
+        {
+          "date": "2026-08-14",
+          "what": "Screenshots showed 2 fieldlists as though that were the corpus; it was an artifact of a --limit flag on the run.",
+          "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md"
+        },
+        {
+          "date": "2026-08-18",
+          "what": "A packet cited packets/evidence/schema1.log, which did not exist, and bias_curve.csv, which was at the repository root.",
+          "where": "packets/schema.json"
+        },
+        {
+          "date": "2026-08-18",
+          "what": "'The missing 13,343' was stated in prose and appeared nowhere in the run it described.",
+          "where": "workplan/2026-08/rajat_import_review_20260818.md"
+        },
+        {
+          "date": "2026-08-19",
+          "what": "A summary quoted a pre-fix reconciliation of 13,658 + 14,594 + 30 while the attached log showed 27,978 + 275 + 29.",
+          "where": "packets/evidence/import-output.txt"
+        }
       ]
     },
     {
@@ -85,8 +182,16 @@
         "harness/tests/test_lessons.py::test_removing_an_assertion_from_a_guard_fails"
       ],
       "occurrences": [
-        {"date": "2026-08-12", "what": "ruff.toml's ignore list was suppressing rule families including B008, so the linter was configured not to see real defects.", "where": "workplan/2026-08/rajat_e2e_ci_audit_20260812.md"},
-        {"date": "2026-08-19", "what": "The phone column was removed from the drift guard's NOT NULL and UNIQUE lists so a change would pass, and the guard then certified an import that could not work.", "where": "migration/tests/test_schema_drift.py"}
+        {
+          "date": "2026-08-12",
+          "what": "ruff.toml's ignore list was suppressing rule families including B008, so the linter was configured not to see real defects.",
+          "where": "workplan/2026-08/rajat_e2e_ci_audit_20260812.md"
+        },
+        {
+          "date": "2026-08-19",
+          "what": "The phone column was removed from the drift guard's NOT NULL and UNIQUE lists so a change would pass, and the guard then certified an import that could not work.",
+          "where": "migration/tests/test_schema_drift.py"
+        }
       ]
     },
     {
@@ -100,9 +205,21 @@
         "harness/tests/test_lessons.py"
       ],
       "occurrences": [
-        {"date": "2026-08-13", "what": "Threshold guidance was written as prose reasoning; it rested on an IoU implementation that turned out to be wrong, and the prose gave no way to notice.", "where": "workplan/superseded/rajat_geoid_v2_review_20260813.md"},
-        {"date": "2026-08-14", "what": "A document asked, in words, that checks not be waived silently. Five days later a guard was edited to pass and nothing objected.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md:406"},
-        {"date": "2026-08-14", "what": "The same document predicted that a check which becomes noise 'gets waived, then gets deleted'. Two checks became noise and were ignored for days by the author who wrote that sentence.", "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md:418"}
+        {
+          "date": "2026-08-13",
+          "what": "Threshold guidance was written as prose reasoning; it rested on an IoU implementation that turned out to be wrong, and the prose gave no way to notice.",
+          "where": "workplan/superseded/rajat_geoid_v2_review_20260813.md"
+        },
+        {
+          "date": "2026-08-14",
+          "what": "A document asked, in words, that checks not be waived silently. Five days later a guard was edited to pass and nothing objected.",
+          "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md:406"
+        },
+        {
+          "date": "2026-08-14",
+          "what": "The same document predicted that a check which becomes noise 'gets waived, then gets deleted'. Two checks became noise and were ignored for days by the author who wrote that sentence.",
+          "where": "workplan/2026-08/rajat_ar2_closeout_20260814.md:418"
+        }
       ]
     },
     {
@@ -112,7 +229,25 @@
       "kind": "advisory",
       "advisory_because": "One occurrence so far, and the commit-binding check already records the commit for a reader to compare. Promoting on a single incident manufactures the kind of speculative check that turns into noise. Revisit on the next occurrence.",
       "occurrences": [
-        {"date": "2026-08-18", "what": "Run records sat at b3c55ed and ac6e536 while the branch tip was 17d3aaf, and a lint regression rode in on the four ungated commits between.", "where": "workplan/2026-08/rajat_import_review_20260818.md"}
+        {
+          "date": "2026-08-18",
+          "what": "Run records sat at b3c55ed and ac6e536 while the branch tip was 17d3aaf, and a lint regression rode in on the four ungated commits between.",
+          "where": "workplan/2026-08/rajat_import_review_20260818.md"
+        }
+      ]
+    },
+    {
+      "recurrence_key": "ci-result-not-read-before-reporting",
+      "trigger": "You have pushed, and you are about to write that the change is green -- in a status log, a review, an email or a summary.",
+      "directive": "Read the run the push triggered before you write the word. A locally chosen subset of the suite is evidence about that subset; the repository's own gate is evidence about the change. If the run has not finished, say that it has not.",
+      "kind": "advisory",
+      "advisory_because": "The gate exists and worked: CI failed on 3aa3514 within two minutes and nothing in the repository was broken by the omission that the next run did not catch. What failed was the reporting step, which is outside this harness. Mechanizing it means a pre-push hook that blocks on a pending run, which would block legitimate pushes; revisit if this recurs.",
+      "occurrences": [
+        {
+          "date": "2026-09-15",
+          "what": "ar2 3aa3514 was pushed at 16:54 local and recorded in the workplan status log as shipped with '7 passed, 25 passed' from two hand-picked test files. Both CI workflows failed on that commit at 16:54 and 16:56, and the failure was found four hours later by reading the test rather than the run.",
+          "where": "confianza/ggms_workplan_20260915.md status log; AR2 CI 35037684619, stomata 35037684605"
+        }
       ]
     }
   ]
