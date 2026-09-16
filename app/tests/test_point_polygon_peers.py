@@ -385,3 +385,70 @@ def test_an_uploaded_point_over_four_hectares_is_skipped_not_registered():
     [result] = _upload([_point_feature(14.9011, -88.4011, area=12.0)])
     assert result["status"] == "skipped"
     assert "2023/1115" in result["message"]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="AG-034: a point's Geo Id is digest([leaf token]) at level 30 and inverts. "
+    "Unfixed pending the identity decision -- private exact cell, published coarse alias.",
+)
+def test_a_points_geo_id_cannot_be_turned_back_into_its_coordinate():
+    """The identifier we hand out must not be the coordinate in another form.
+
+    Every other privacy test in this file guards the *contents* of the masked
+    view. This one guards the handle, which is the one field L0 cannot withhold:
+    a caller fetches by Geo Id, a List names its members by Geo Id, and a
+    published dataset of Geo Ids is the whole point of the identifier. If the
+    handle inverts, masking the body is decoration.
+
+    A polygon's name is safe by arithmetic rather than by intent: it hashes a
+    cover of many cells, and the attacker has to guess the set. A point's name
+    hashes exactly one leaf cell -- ``POINT_LEVEL = LEAF_LEVEL = 30``, about
+    0.78 cm2 -- so the search space is however small a region the attacker can
+    bound the plot to, and a farm is not hard to bound. This searches a box one
+    metre across, which is the friendliest possible case for the registry: if
+    the coordinate falls out of a box that small, it falls out of a district.
+
+    Marked strict-xfail rather than deleted or softened. It fails today, and the
+    fix is a design decision recorded as AG-034 in the agstack review ledger --
+    keep the exact leaf cell as the private identity and publish a coarsened
+    alias. When that lands this test starts passing, ``strict=True`` turns the
+    pass into a failure, and whoever did the work is told to remove the marker.
+    That is the opposite of a guard quietly weakened to green.
+    """
+    geo_id = _register_point().json()["Geo Id"]
+
+    # The published identifier, not a recomputation of it: invert what the API
+    # actually hands out.
+    assert geo_id == geoid_v2.point_geo_id_with_tokens(POINT_LAT, POINT_LNG)[1]
+
+    half_m = 0.5
+    deg_lat = half_m / 110_574.0
+    deg_lng = half_m / (111_320.0 * 0.968)  # cos(14.81 deg)
+    step = 6e-8  # ~0.7 cm, finer than a leaf cell, so no cell is stepped over
+
+    import hashlib  # noqa: PLC0415
+
+    import s2geometry as s2g  # noqa: PLC0415
+
+    seen: set[str] = set()
+    recovered = None
+    lat = POINT_LAT - deg_lat
+    while lat <= POINT_LAT + deg_lat and recovered is None:
+        lng = POINT_LNG - deg_lng
+        while lng <= POINT_LNG + deg_lng:
+            token = s2g.S2CellId(s2g.S2LatLng.FromDegrees(lat, lng)).ToToken()
+            if token not in seen:
+                seen.add(token)
+                if hashlib.sha256(token.encode()).hexdigest() == geo_id:
+                    recovered = (lat, lng)
+                    break
+            lng += step
+        lat += step
+
+    assert recovered is None, (
+        f"the Geo Id inverts: {len(seen):,} candidate leaf cells in a 1 m box were "
+        f"enough to recover {recovered[0]:.6f}, {recovered[1]:.6f} from the hash alone. "
+        "A point's Geo Id is its coordinate re-encoded, so it must be treated as L1 "
+        "data wherever geometry is withheld -- see AG-034."
+    )

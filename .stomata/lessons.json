@@ -255,6 +255,20 @@
           "where": "confianza/ggms_workplan_20260915.md status log; AR2 CI 35037684619, stomata 35037684605"
         }
       ]
+    },
+    {
+      "recurrence_key": "hashed-identifier-inverted-over-a-small-domain",
+      "kind": "mechanized",
+      "trigger": "You are about to call a hashed or derived identifier safe to publish, log, or hand to a counterparty, on the grounds that the hash is one-way.",
+      "directive": "One-way is a property of the function; disclosure is a property of the domain. Before publishing, count the inputs an attacker plausibly has to try and say the number out loud. A GeoID over a polygon's many-cell cover is safe because the attacker must guess a set. A GeoID over a point is digest([leaf.ToToken()]) with POINT_LEVEL = LEAF_LEVEL = 30 -- one cell of 0.78 cm2 -- so the domain is the leaf cells of whatever region the plot can be bounded to, and a farm is easy to bound. If that count is small, the identifier is the data in another form and inherits its masking rules, whatever the hash function guarantees.",
+      "occurrences": [
+        {
+          "date": "2026-09-15",
+          "what": "A licence gate for third-party boundary ingestion was written in the agstack review workspace resting on the premise that 'a geoid is SHA-256 over sorted S2 cell tokens, it is one-way, publishing geoids alone discloses no geometry', and the plan it gated was to publish a geoid per boundary under CDLA-Permissive-2.0. The premise came from the AR 1.5 specification and doc/reference/AR_1.5_GEOID_COMPARISON.md, which describe one uniform algorithm over a compact cover and have no point case at all; ar2 app/geoid_v2.py has one. Reading it, the Geo Id returned by /register-point was inverted back to the exact registered coordinate from 6,489 candidate leaf cells in a box one metre across, in under two seconds. The same session's standalone run recovered a Lempira coordinate to 0.48 cm from 640,697 candidates at 121,701/sec single-threaded. Caught before any point geoid was published, and before the white paper proposing an open geoid corpus was written.",
+          "where": "agstack bin/check-boundary-license docstring as committed at 6084f0f; corrected at 9e246e9 and recorded as AG-034 in agstack review/findings.json, reproduction at agstack review/point_geoid_preimage.py"
+        }
+      ],
+      "enforced_by": "app/tests/test_point_polygon_peers.py::test_a_points_geo_id_cannot_be_turned_back_into_its_coordinate, which registers through the API and brute-forces the Geo Id it returns. Read the next sentence before trusting the suite on this: the test is xfail(strict=True) and therefore does NOT block today, because the defect is real and unfixed pending the AG-034 identity decision. What strict buys is the other direction -- the moment a coarse published alias lands and the Geo Id stops inverting, the test passes, strict turns that pass into a build failure, and whoever did the work is told to take the marker off. Confirmed on 2026-09-15 in both directions: XFAIL as written, and '1 failed' when the assertion was neutralised."
     }
   ]
 }
