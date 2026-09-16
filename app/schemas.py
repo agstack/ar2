@@ -42,6 +42,11 @@ class FetchFieldResponse(BaseModel):
     geo_id: str = Field(..., alias="GEO Id")
     geo_id_short: str = Field(..., alias="GEO Id Short")
     masking_level: str | None = Field(None, alias="MaskingLevel")
+    # Whether this plot is a boundary or a coordinate, and how much ground it
+    # covers. Both are answered at L0 as well as L1: a reader who may not see
+    # the geometry still needs to know what kind of plot the identifier names.
+    geometry_kind: str | None = Field(None, alias="GeometryKind")
+    area_ha: float | None = Field(None, alias="AreaHa")
     geo_data: dict[str, Any] | None = Field(None, alias="Geo Data")
     geo_json: dict[str, Any] = Field(..., alias="Geo JSON")
 

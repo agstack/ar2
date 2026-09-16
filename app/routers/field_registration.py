@@ -431,13 +431,33 @@ async def register_field_boundaries_geojson(
                         20: S2Service.wkt_to_cell_tokens(field_wkt, 20, point=True),
                         30: S2Service.wkt_to_cell_tokens(field_wkt, 30, point=True)
                     }
-                    # A point has no area, so the polygon coverer cannot be used.
-                    # Its leaf cell is still content-derived and deterministic,
-                    # and it is a descendant of any containing field's cover, so
-                    # the existing ancestor probe relates the two unchanged.
+                    # A point is registered here exactly as /register-point
+                    # registers one: a one-cell cover of its leaf, the declared
+                    # area it stands for, and resolution by distance below. A
+                    # GeoJSON upload that happens to hold points must not
+                    # produce plots of a different kind from the same points
+                    # sent one at a time.
                     v2_tokens, geo_id = geoid_v2.point_geo_id_with_tokens(lat, lng)
+                    try:
+                        declared_area_ha = geoid_v2.point_area_declared(
+                            properties.get('declared_area_ha', properties.get('area_ha'))
+                        )
+                    except geoid_v2.GeometryUnusable as exc:
+                        results.append({
+                            "status": "skipped",
+                            "message": str(exc),
+                            "geo_json": feature
+                        })
+                        yield json.dumps({
+                            "status": "processing",
+                            "progress": index + 1,
+                            "percentage": round(((index + 1) / total_features) * 100, 2)
+                        }) + "\n"
+                        continue
                     indices[geoid_v2.COVER_KEY] = v2_tokens
                     indices[geoid_v2.REGIME_KEY] = geoid_v2.REGIME_VERSION
+                    indices[geoid_v2.KIND_KEY] = geoid_v2.KIND_POINT
+                    indices[geoid_v2.DECLARED_AREA_KEY] = declared_area_ha
                 else: 
                     lat = feature['geometry']['coordinates'][0][0][1]
                     lng = feature['geometry']['coordinates'][0][0][0]
@@ -465,9 +485,10 @@ async def register_field_boundaries_geojson(
                         continue
                     indices[geoid_v2.COVER_KEY] = v2_tokens
                     indices[geoid_v2.REGIME_KEY] = geoid_v2.REGIME_VERSION
+                    indices[geoid_v2.KIND_KEY] = geoid_v2.KIND_POLYGON
 
                 country = Utils.get_country_from_point([lng, lat])
-                area_ha = None
+                area_ha = declared_area_ha if geometry_type == 'Point' else None
                 if geometry_type != 'Point':
                     area_in_acres = Utils.get_are_in_acres(field_wkt)
                     area_ha = area_in_acres * 0.404686
@@ -525,10 +546,29 @@ async def register_field_boundaries_geojson(
                         }) + "\n"
                         continue
 
-                # Points get no resolution pass -- there is no area to compare --
-                # so a repeat has to be caught here or it would violate the unique
-                # constraint on geo_id. Two registrations of the same point are
-                # the same point; that is the identity working, not a collision.
+                # Points resolve too, by distance rather than by IoU: a second
+                # fix of one plot is an alias of the first, not a second plot.
+                if geometry_type == 'Point':
+                    point_action, point_canonical = Utils.resolve_point_or_register(
+                        db=db, lat=lat, lng=lng, payload=properties, content_hash=content_hash
+                    )
+                    if point_action == "resolved":
+                        results.append({
+                            "status": "exists",
+                            "message": (
+                                f"Point within {geoid_v2.POINT_SAME_AS_METRES:g} m of a registered "
+                                "plot; resolved to it."
+                            ),
+                            "geo_id": point_canonical,
+                            "geo_json": feature
+                        })
+                        yield json.dumps({
+                            "status": "processing",
+                            "progress": index + 1,
+                            "percentage": round(((index + 1) / total_features) * 100, 2)
+                        }) + "\n"
+                        continue
+
                 if geometry_type == 'Point' and Utils.lookup_geo_ids(db, geo_id):
                     results.append({
                         "status": "exists",

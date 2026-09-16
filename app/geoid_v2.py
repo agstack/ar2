@@ -82,6 +82,25 @@ REGIME_VERSION = "v2"
 COVER_KEY = "v2_cover"
 REGIME_KEY = "regime"
 
+KIND_KEY = "geometry_kind"
+"""Whether the plot was registered as a boundary or as a coordinate.
+
+Derivable from the cover -- a point's is one cell at the leaf level, a
+polygon's is not -- and recorded anyway, because every consumer that has to
+treat the two differently would otherwise re-derive it, and one of them would
+get it wrong. ``kind_of`` is the single reader, and it falls back to the
+derivation for rows written before this key existed."""
+
+DECLARED_AREA_KEY = "declared_area_ha"
+"""The area a point stands for, as declared by the registrant.
+
+On the wire at L1 as well as in the masked view, because the node that screens
+the plot needs it: without it a point is one 36 m sample being called a farm.
+Meaningless for a polygon, whose area is computed from its boundary."""
+
+KIND_POINT = "point"
+KIND_POLYGON = "polygon"
+
 
 class GeometryUnusable(ValueError):
     """The geometry cannot yield a content-derived identity.
@@ -292,6 +311,20 @@ def is_point_cover(tokens: list[str] | None) -> bool:
     if not tokens or len(tokens) != 1:
         return False
     return s2g.S2CellId.FromToken(tokens[0]).level() == POINT_LEVEL
+
+
+def kind_of(geo_data: dict | None) -> str:
+    """Whether a stored registration is a point or a polygon.
+
+    Reads the recorded kind, and derives it from the cover for rows written
+    before the key existed. One reader, so a consumer cannot disagree with the
+    registry about what it is holding.
+    """
+    geo_data = geo_data or {}
+    kind = geo_data.get(KIND_KEY)
+    if kind in (KIND_POINT, KIND_POLYGON):
+        return kind
+    return KIND_POINT if is_point_cover(geo_data.get(COVER_KEY)) else KIND_POLYGON
 
 
 def point_of_cover(tokens: list[str]) -> tuple[float, float]:

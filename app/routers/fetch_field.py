@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app import geoid_v2
 from app.auth import get_current_user, verify_field_grant
 from app.database import get_db
 from app.models import GeoID
@@ -16,6 +17,24 @@ from app.schemas import FetchFieldResponse
 from app.utils import Utils
 
 router = APIRouter(prefix="", tags=["Fetch Field"])
+
+def _area_on_the_wire(record) -> float | None:
+    """The area to publish for a plot, whichever kind it is.
+
+    A polygon's is computed from its boundary at registration; a point's is the
+    one the registrant declared, which is the only area it has and the number a
+    screening node needs to know how much ground a single coordinate is standing
+    for. Both arrive under one key so a consumer does not have to branch to find
+    out how big the plot is.
+    """
+    geo_data = record.geo_data or {}
+    if geoid_v2.kind_of(geo_data) == geoid_v2.KIND_POINT:
+        declared = geo_data.get(geoid_v2.DECLARED_AREA_KEY)
+        if declared is None:
+            declared = record.area_ha_approx
+        return round(declared, 4) if declared else None
+    return round(record.area_ha_approx, 4) if record.area_ha_approx is not None else None
+
 
 def apply_masking_logic(record, user, s2_index=None):
     wkt = record.geo_data.get("wkt")
@@ -45,6 +64,8 @@ def apply_masking_logic(record, user, s2_index=None):
             "GEO Id": record.geo_id,
             "GEO Id Short": record.geo_id_short,
             "MaskingLevel": masking_level,
+            "GeometryKind": geoid_v2.kind_of(record.geo_data),
+            "AreaHa": _area_on_the_wire(record),
             "Geo Data": filtered_geo_data,
             "Geo JSON": field_boundary_geo_json
         }
@@ -58,7 +79,13 @@ def apply_masking_logic(record, user, s2_index=None):
     masked_geo_data = {
         "cell_token": s2_l10_data["token"],
         "country": record.country,
-        "area_ha": area_ha
+        "area_ha": area_ha,
+        # Which of the two kinds of plot this is, at L0 as well as L1. A reader
+        # entitled only to the masked view still has to know whether the cell
+        # stands for a boundary or for a coordinate with a declared area: it is
+        # the difference between a screen that read the plot and one that read a
+        # sample of it.
+        geoid_v2.KIND_KEY: geoid_v2.kind_of(record.geo_data),
     }
     
     return {
@@ -66,6 +93,8 @@ def apply_masking_logic(record, user, s2_index=None):
         "GEO Id": record.geo_id,
         "GEO Id Short": record.geo_id_short,
         "MaskingLevel": record.mask_level or "L0",
+        "GeometryKind": masked_geo_data[geoid_v2.KIND_KEY],
+        "AreaHa": area_ha,
         "Geo Data": masked_geo_data,
         "Geo JSON": s2_l10_data["geojson"]
     }
@@ -238,14 +267,20 @@ async def eudr_export(geo_id: str, user: dict | None = Depends(get_current_user)
         field_wkt = record.geo_data.get('wkt')
         if not field_wkt:
             raise HTTPException(status_code=500, detail="Stored geometry is missing WKT data.")
-            
-        eudr_geojson = Utils.get_eudr_multipolygon(field_wkt)
-        
+
+        kind = geoid_v2.kind_of(record.geo_data)
+        try:
+            eudr_geojson = Utils.get_eudr_multipolygon(field_wkt, _area_on_the_wire(record))
+        except geoid_v2.GeometryUnusable as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
         return {
             "message": "EUDR export generated successfully.",
             "GEO Id": record.geo_id,
             "GEO Id Short": record.geo_id_short,
             "MaskingLevel": "L1",
+            "GeometryKind": kind,
+            "AreaHa": _area_on_the_wire(record),
             "Geo JSON": eudr_geojson
         }
     except HTTPException:

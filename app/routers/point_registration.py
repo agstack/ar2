@@ -90,6 +90,8 @@ async def register_point(
         v2_tokens, geo_id = geoid_v2.point_geo_id_with_tokens(lat, lng)
         indices[geoid_v2.COVER_KEY] = v2_tokens
         indices[geoid_v2.REGIME_KEY] = geoid_v2.REGIME_VERSION
+        indices[geoid_v2.KIND_KEY] = geoid_v2.KIND_POINT
+        indices[geoid_v2.DECLARED_AREA_KEY] = area_ha
         geo_id_l20 = geo_id
         geo_id_short = GeoDataUtils.generate_short_geo_id(geo_id)
         records_list = Utils.records_s2_cell_tokens(indices)
@@ -389,6 +391,8 @@ async def register_points_geojson(
                 v2_tokens, geo_id = geoid_v2.point_geo_id_with_tokens(lat, lng)
                 indices[geoid_v2.COVER_KEY] = v2_tokens
                 indices[geoid_v2.REGIME_KEY] = geoid_v2.REGIME_VERSION
+                indices[geoid_v2.KIND_KEY] = geoid_v2.KIND_POINT
+                indices[geoid_v2.DECLARED_AREA_KEY] = area_ha
                 geo_id_l20 = geo_id
                 geo_id_short = GeoDataUtils.generate_short_geo_id(geo_id)
                 records_list = Utils.records_s2_cell_tokens(indices)

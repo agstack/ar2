@@ -18,6 +18,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import geoid_v2
+from app.geoid_v2 import GeometryUnusable
 from app.models.geo_id_model import GeoID, GeoIDAlias
 
 load_dotenv()
@@ -455,14 +456,37 @@ class Utils:
             return []
 
     @staticmethod
-    def get_eudr_multipolygon(wkt_string: str) -> dict:
+    def get_eudr_multipolygon(wkt_string: str, declared_area_ha: float | None = None) -> dict:
+        """The plot as the EU Information System wants it filed.
+
+        Two shapes, not one. A boundary is filed as its polygon and the area is
+        read off it. A plot declared by a coordinate is filed as that Point with
+        an ``Area`` property in hectares, which Regulation (EU) 2023/1115
+        Art. 2(28) requires and caps at four -- a Point without it is rejected
+        by the DDS schema, so this refuses to emit one rather than produce a
+        filing that fails at the registry.
+        """
         import shapely
-        from shapely.geometry import MultiPolygon, Polygon, mapping
+        from shapely.geometry import MultiPolygon, Point, Polygon, mapping
         geom = load_wkt(wkt_string)
         
         # Ensure 2D and 6-decimal precision
         geom = shapely.ops.transform(lambda x, y, *args: (round(x, 6), round(y, 6)), geom)
-        
+
+        if isinstance(geom, Point):
+            if not declared_area_ha:
+                raise GeometryUnusable(
+                    "this plot is a coordinate with no declared area, and the EU Information "
+                    "System requires an Area on a Point (Regulation (EU) 2023/1115 Art. 2(28)). "
+                    "Re-register the point with declared_area_ha, or register the boundary."
+                )
+            area = geoid_v2.point_area_declared(declared_area_ha)
+            return {
+                "type": "Feature",
+                "properties": {"Area": round(area, 4)},
+                "geometry": json.loads(geojson.dumps(mapping(geom))),
+            }
+
         if isinstance(geom, Polygon):
             geom = MultiPolygon([geom])
             
