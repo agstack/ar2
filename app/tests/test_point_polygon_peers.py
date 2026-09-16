@@ -159,6 +159,54 @@ def test_neither_kind_leaks_its_geometry_without_a_grant(plots):
         assert body["Geo JSON"]["type"] in ("Polygon", "Feature"), kind
 
 
+def test_the_coordinate_itself_is_nowhere_in_the_masked_view():
+    """A point is the one geometry a mask could leak whole, so look for it.
+
+    Absence of the ``wkt`` key is a weaker statement than it reads as: the fix
+    is two numbers, and two numbers can travel in a centroid, a bounding box or
+    a rounded convenience field without the word "wkt" appearing anywhere. This
+    searches the serialised response for the coordinate at every rounding a
+    leak would plausibly take, so that the check can actually fail if one
+    appears. A boundary leaks a shape; a point leaks the farm.
+    """
+    geo_id = _register_point().json()["Geo Id"]
+    body = client.get(f"/fetch-field/{geo_id}").json()
+    assert body["MaskingLevel"] == "L0"
+    blob = json.dumps(body)
+
+    for places in range(6, 1, -1):
+        for axis, value in (("lat", POINT_LAT), ("lng", POINT_LNG)):
+            needle = f"{value:.{places}f}".rstrip("0")
+            assert needle not in blob, (
+                f"the masked view carries the {axis} to {places} decimal places ({needle}); "
+                "L0 is supposed to stand for the plot, not locate it"
+            )
+
+
+def test_the_masking_cell_is_the_same_size_for_a_point_as_for_a_boundary(plots):
+    """The cell is what does the masking, so its extent is the privacy claim.
+
+    A level-10 cell is roughly 87 km2 near the Honduran coffee belt. If a point
+    were ever masked by a tighter cell than a boundary -- because it has no
+    extent of its own to hide behind -- the mask would be doing less work for
+    the plot that needs it most.
+    """
+    spans = {}
+    for kind, geo_id in plots.items():
+        body = client.get(f"/fetch-field/{geo_id}").json()
+        ring = body["Geo JSON"]["coordinates"][0]
+        lngs, lats = [p[0] for p in ring], [p[1] for p in ring]
+        spans[kind] = (max(lngs) - min(lngs), max(lats) - min(lats))
+
+    for kind, (dlng, dlat) in spans.items():
+        # ~0.0779 degrees of longitude and ~0.0938 of latitude at this latitude.
+        assert dlng > 0.05, f"{kind}: masking cell is only {dlng:.4f} deg wide"
+        assert dlat > 0.05, f"{kind}: masking cell is only {dlat:.4f} deg tall"
+    assert spans["point"] == pytest.approx(spans["polygon"], abs=0.02), (
+        "a coordinate must not be masked by a tighter cell than a boundary"
+    )
+
+
 def test_the_area_is_published_under_one_key_for_both(plots):
     for kind, geo_id in plots.items():
         body = client.get(f"/fetch-field/{geo_id}").json()
