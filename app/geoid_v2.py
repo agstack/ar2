@@ -189,12 +189,22 @@ def cover_tokens(wkt_string: str) -> list[str]:
     return sorted(cid.ToToken() for cid in union.cell_ids())
 
 
-def geo_id_with_tokens(wkt_string: str) -> tuple[list[str], str]:
-    tokens = cover_tokens(wkt_string)
+def digest(tokens: list[str]) -> str:
+    """SHA-256 over the concatenated sorted cover tokens.
+
+    The one place a cover becomes a name. Points and polygons both go through
+    here, so a one-token cover is named by the same arithmetic as a 4,000-token
+    one and nothing has to be kept in step by hand.
+    """
     h = hashlib.sha256()
     for t in tokens:
         h.update(t.encode())
-    return tokens, h.hexdigest()
+    return h.hexdigest()
+
+
+def geo_id_with_tokens(wkt_string: str) -> tuple[list[str], str]:
+    tokens = cover_tokens(wkt_string)
+    return tokens, digest(tokens)
 
 
 def geo_id(wkt_string: str) -> str:
@@ -218,18 +228,38 @@ def content_hash(wkt_string: str) -> str:
 # points
 # --------------------------------------------------------------------------
 
-POINT_LEVEL = 20
-"""The cell a point is quantized to before it is named: level 20, about 8 m on a
-side in Honduras, roughly a handheld GPS fix's error.
+POINT_LEVEL = LEAF_LEVEL
+"""The cell a point is named by: its leaf cell, about 1 cm, the finest S2 has.
 
-Until 2026-09-15 a point was named by its level-30 leaf cell, about 1 cm. That
-is content-derived, but it is not an identity: two fixes of the same tree taken
-a minute apart land in different leaf cells and get different names, and there
-is no IoU to resolve them because a point has no area. Quantizing to the cell a
-fix cannot reliably leave makes re-registration converge the way a re-survey of
-a polygon converges through IoU. Two points inside one 8 m cell are one plot to
-this registry, which is the intended reading for a smallholding declared by a
-single coordinate under Regulation (EU) 2023/1115 Article 2(28)."""
+A point keeps the precision it was surveyed at, exactly as a polygon keeps its
+vertices. Convergence is not the name's job here; it is the resolver's, below.
+
+This was level 20 (~8 m) for part of 2026-09-15, on the reasoning that a fix
+cannot reliably leave an 8 m cell so quantizing to it would make a re-survey
+converge. Measured over 20,000 random fixes in the Honduran coffee belt, that
+held 86.3% of the time at 1 m of jitter and 60.5% at 3 m: a fix near a cell
+boundary crosses it, and the grid has no way to know it is near one. The same
+grid called two genuinely different plots 5 m apart one plot 40.0% of the time.
+Both errors are the grid's arbitrariness, not the data's, and a finer or coarser
+grid only moves them. A distance threshold has neither failure: it is the same
+answer wherever the plot happens to sit."""
+
+POINT_BLOCKING_LEVEL = 20
+"""Candidate pre-filter for point resolution, the analogue of BLOCKING_LEVEL for
+polygons: a fix's L20 cell *and its eight neighbours*, so a candidate on the far
+side of a cell boundary is still considered. Blocking that ignored the
+neighbours would reintroduce the cliff it is there to remove."""
+
+POINT_SAME_AS_METRES = 10.0
+"""Two fixes this far apart or closer are the same plot re-registered.
+
+Ten metres is inside the error of a handheld GNSS fix under coffee shade and
+well below the span of a plot a point is allowed to stand for (4 ha is about
+200 m across). It is a policy number, not a fact: it is exposed here so an
+operator can move it, and the verdict records which value was applied."""
+
+EARTH_RADIUS_M = 6371010.0
+"""Mean Earth radius, the value S2 uses for its own kilometre conversions."""
 
 POINT_MAX_AREA_HA = 4.0
 """Regulation (EU) 2023/1115 Article 2(28): a plot of land of at most four
@@ -238,20 +268,71 @@ polygon, and so does this registry."""
 
 
 def point_geo_id_with_tokens(lat: float, lng: float) -> tuple[list[str], str]:
-    """Identity for a point registration: the level-20 cell containing it.
+    """Identity for a point registration: a one-cell cover of its leaf cell.
 
-    A point has no area, so the polygon coverer cannot be used. Hashing the
-    quantized cell keeps the identity content-derived and deterministic, and
-    keeps points and fields in one namespace: the cell of a point inside a field
-    is a descendant of (or equal to) a cell in that field's cover, so the
-    existing ancestor probe relates them without a special case.
+    The same shape as a polygon's identity -- a sorted list of cover tokens run
+    through digest() -- with a list of one. That is what lets a List hold points
+    and fields together without knowing which is which, and what lets the
+    ancestor probe relate a point to the field it sits in: its leaf cell is a
+    descendant of a cell in that field's cover.
+
+    Two fixes of the same tree get two names here, because they are two
+    different coordinates. They are brought together by resolution at
+    registration, the way two redraws of one field are: see point_same_as.
     """
     # The S2CellId constructor takes an S2LatLng and yields a leaf cell directly;
     # these bindings expose no FromLatLng classmethod.
     leaf = s2g.S2CellId(s2g.S2LatLng.FromDegrees(lat, lng))
-    cell = leaf.parent(POINT_LEVEL)
-    tokens = [cell.ToToken()]
-    return tokens, hashlib.sha256(tokens[0].encode()).hexdigest()
+    tokens = [leaf.parent(POINT_LEVEL).ToToken()] if POINT_LEVEL != LEAF_LEVEL else [leaf.ToToken()]
+    return tokens, digest(tokens)
+
+
+def is_point_cover(tokens: list[str] | None) -> bool:
+    """Whether a stored cover is a point's: exactly one cell, at POINT_LEVEL."""
+    if not tokens or len(tokens) != 1:
+        return False
+    return s2g.S2CellId.FromToken(tokens[0]).level() == POINT_LEVEL
+
+
+def point_of_cover(tokens: list[str]) -> tuple[float, float]:
+    """The (lat, lng) a point cover stands for: the centre of its one cell.
+
+    At leaf level that is the fix itself to within about a centimetre, so a
+    candidate's coordinates can be recovered from its cover without reading a
+    geometry the caller may not be entitled to see.
+    """
+    ll = s2g.S2CellId.FromToken(tokens[0]).ToLatLng()
+    return ll.lat().degrees(), ll.lng().degrees()
+
+
+def metres_between(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Great-circle distance in metres, on S2's sphere."""
+    a = s2g.S2LatLng.FromDegrees(lat1, lng1)
+    b = s2g.S2LatLng.FromDegrees(lat2, lng2)
+    return a.GetDistance(b).radians() * EARTH_RADIUS_M
+
+
+def point_same_as(
+    lat1: float, lng1: float, lat2: float, lng2: float, threshold_m: float = POINT_SAME_AS_METRES
+) -> bool:
+    """Whether two fixes name the same plot.
+
+    The point regime's counterpart to IoU over covers. Unlike a grid, this gives
+    the same answer wherever the plot sits: there is no boundary to be near.
+    """
+    return metres_between(lat1, lng1, lat2, lng2) <= threshold_m
+
+
+def point_blocking_key(lat: float, lng: float) -> list[str]:
+    """Candidate pre-filter tokens for a fix: its L20 cell and the eight around it.
+
+    Returned for the s2_cells overlap query, which is how the polygon path finds
+    candidates too. The neighbours are the point that matters: a fix a metre
+    inside one cell has its re-survey a metre inside the next one, and blocking
+    on the single cell would never show them to each other.
+    """
+    cell = s2g.S2CellId(s2g.S2LatLng.FromDegrees(lat, lng)).parent(POINT_BLOCKING_LEVEL)
+    return sorted({cell.ToToken(), *(n.ToToken() for n in cell.GetAllNeighbors(POINT_BLOCKING_LEVEL))})
 
 
 def point_area_declared(area_ha: float | None) -> float:

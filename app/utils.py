@@ -289,6 +289,65 @@ class Utils:
         return "new", None
 
     @staticmethod
+    def resolve_point_or_register(
+        db: Session, lat: float, lng: float, payload: dict, content_hash: str,
+        threshold_m: float = geoid_v2.POINT_SAME_AS_METRES,
+    ):
+        """Resolve a fix against already-registered plots, or report it as new.
+
+        The point counterpart of resolve_or_register, and deliberately the same
+        shape: block on cells the s2_cells index already holds, compare each
+        candidate on a metric, resolve to the earliest match and record the
+        submission as an alias of it.
+
+        The metric is what differs. IoU is 0 for any two distinct points, so it
+        cannot say that two fixes of one tree are one plot; distance can, and it
+        does not care where the grid's boundaries fall. A candidate that is a
+        field rather than a point is left to the existing containment rule --
+        a fix inside a boundary is child_of it, which IoU over covers already
+        decides correctly, because a leaf cell inside a cover is contained by it.
+        """
+        blocking = geoid_v2.point_blocking_key(lat, lng)
+        matched = Utils.fetch_geo_ids_for_cell_tokens(db, blocking)
+        if not matched:
+            return "new", None
+
+        candidates = db.query(GeoID.id, GeoID.geo_id, GeoID.geo_data, GeoID.s2_cells, GeoID.created_at)\
+                       .filter(GeoID.geo_id.in_(matched)).all()
+
+        same_as, child_of = [], []
+        probe = geoid_v2.point_geo_id_with_tokens(lat, lng)[0]
+        for cand_id, cand_geo_id, cand_geo_data, cand_s2_cells, cand_created_at in candidates:
+            cand_tokens = Utils._comparison_cover(cand_geo_data, cand_s2_cells, 20)
+            if not cand_tokens:
+                continue
+            if geoid_v2.is_point_cover(cand_tokens):
+                clat, clng = geoid_v2.point_of_cover(cand_tokens)
+                if geoid_v2.point_same_as(lat, lng, clat, clng, threshold_m):
+                    same_as.append((cand_geo_id, cand_created_at, cand_id))
+            else:
+                _, containment = geoid_v2.iou_and_containment(probe, cand_tokens)
+                if containment >= 1.0:
+                    child_of.append((cand_geo_id, cand_created_at, cand_id))
+
+        for bucket, relation in ((same_as, "same_as"), (child_of, "child_of")):
+            if not bucket:
+                continue
+            bucket.sort(key=lambda x: (x[1], x[2]))
+            canonical = bucket[0][0]
+            db.add(GeoIDAlias(
+                canonical_geo_id=canonical,
+                alias_content_hash=content_hash,
+                submitter=payload.get("submitter"),
+                accuracy_class=payload.get("accuracy_class"),
+                relation=relation,
+            ))
+            db.commit()
+            return ("resolved", canonical) if relation == "same_as" else ("nested", canonical)
+
+        return "new", None
+
+    @staticmethod
     def get_s2_indexes_to_remove(s2_indexes: list):
         valid_s2_indexes_set = {8, 13, 15, 18, 19, 20}
         s2_indexes_set = set(s2_indexes)

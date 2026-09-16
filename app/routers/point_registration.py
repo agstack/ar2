@@ -84,8 +84,8 @@ async def register_point(
             30: S2Service.wkt_to_cell_tokens(point_wkt, 30, point=True)
         }
 
-        # The identity is the v2 point regime: the level-20 cell the fix lands in,
-        # so a re-registration a few metres off converges on the same name. The
+        # The identity is the v2 point regime: a one-cell cover of the leaf the
+        # fix lands in, named by the same digest a polygon's cover is. The
         # per-level tokens above are kept for the s2_cells index as before.
         v2_tokens, geo_id = geoid_v2.point_geo_id_with_tokens(lat, lng)
         indices[geoid_v2.COVER_KEY] = v2_tokens
@@ -93,6 +93,23 @@ async def register_point(
         geo_id_l20 = geo_id
         geo_id_short = GeoDataUtils.generate_short_geo_id(geo_id)
         records_list = Utils.records_s2_cell_tokens(indices)
+
+        # A second fix of the same plot is a new name and an old plot, exactly as
+        # a redrawn boundary is: resolve before minting.
+        status, canonical = Utils.resolve_point_or_register(
+            db=db, lat=lat, lng=lng, payload=payload.model_dump(), content_hash=content_hash
+        )
+        if status == "resolved":
+            return {
+                "message": (
+                    f"Point already registered within {geoid_v2.POINT_SAME_AS_METRES:g} m; "
+                    "resolved to the existing plot."
+                ),
+                "Geo Id": canonical,
+                "Geo Id Short": GeoDataUtils.generate_short_geo_id(canonical),
+                "MaskingLevel": "L0",
+                "Geo JSON": S2Service.get_s2_level_10_polygon(lat=lat, long=lng)["geojson"],
+            }
 
         geo_id_exists_wkt = Utils.lookup_geo_ids(db, geo_id)
         if not geo_id_exists_wkt:
@@ -375,6 +392,27 @@ async def register_points_geojson(
                 geo_id_l20 = geo_id
                 geo_id_short = GeoDataUtils.generate_short_geo_id(geo_id)
                 records_list = Utils.records_s2_cell_tokens(indices)
+
+                status, canonical = Utils.resolve_point_or_register(
+                    db=db, lat=lat, lng=lng, payload=properties, content_hash=content_hash
+                )
+                if status == "resolved":
+                    results.append({
+                        "status": "exists",
+                        "message": (
+                            f"Point within {geoid_v2.POINT_SAME_AS_METRES:g} m of a registered "
+                            "plot; resolved to it."
+                        ),
+                        "geo_id": canonical,
+                        "MaskingLevel": "L0",
+                        "geo_json": S2Service.get_s2_level_10_polygon(lat=lat, long=lng)["geojson"],
+                    })
+                    yield json.dumps({
+                        "status": "processing",
+                        "progress": index + 1,
+                        "percentage": round(((index + 1) / total_features) * 100, 2)
+                    }) + "\n"
+                    continue
                 
                 s2_index = feature.get('properties', {}).get('s2_index')
                 s2_indexes_to_remove = -1
