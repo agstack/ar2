@@ -69,7 +69,7 @@ These are defects that have already happened here, more than once each. They
 are generated from `.stomata/lessons.json` by `stomata brief --write`; edit the
 ledger, not this block, or check L will fail on the next run.
 
-### gate-reports-green-while-blind (7 occurrences)
+### gate-reports-green-while-blind (9 occurrences)
 
 **When:** A check, test or assertion reports success.
 
@@ -77,13 +77,13 @@ ledger, not this block, or check L will fail on the next run.
 
 *Enforced by: harness/stomata/checks.py, harness/tests/test_stomata.py*
 
-### twin-divergence (6 occurrences)
+### twin-divergence (8 occurrences)
 
 **When:** One fact is represented in two places -- a mirror and the system it mirrors, a function and its caller, the same logic in two packages, a value in two config files.
 
 **Do:** Change both in the same commit, and add a test that fails when they disagree. Do not rely on remembering the second one, because the second one is what gets forgotten.
 
-*Enforced by: migration/tests/test_points_are_importable.py, migration/tests/test_schema_drift.py::test_mirrored_constraints_match_the_real_schema, stomata.json*
+*Enforced by: app/tests/test_point_polygon_peers.py::test_a_point_in_an_upload_is_the_same_plot_as_the_same_point_sent_alone, migration/tests/test_points_are_importable.py, migration/tests/test_schema_drift.py::test_mirrored_constraints_match_the_real_schema, stomata.json*
 
 ### label-diverges-from-outcome (5 occurrences)
 
