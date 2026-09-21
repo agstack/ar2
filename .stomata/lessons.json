@@ -53,6 +53,11 @@
           "date": "2026-08-26",
           "what": "All committed grant fixtures expired on 2026-08-20 (30-day mint window). The tamper/revocation/wrong-geoid tests kept passing for six days -- the verifier rejected the credentials for expiry, not the property under test -- while a conftest docstring claimed there was no expiry cliff.",
           "where": "app/tests/conftest.py"
+        },
+        {
+          "date": "2026-09-20",
+          "what": "The lint ratchet reported '0 violation(s), down from 36' while measuring nothing. ruff was absent from the interpreter STOMATA_PYTHON names, the failure went to stderr, and run_lint counts stdout lines -- so zero lines read as zero violations, the best possible result. It hid a real rise from 36 to 38 introduced by the change it was gating. Fixed in the harness: a non-zero exit with no diagnostics is now reported as blind rather than clean, verified across six outcomes.",
+          "where": "harness/stomata/run.py:run_lint, checks.py:check_lint_ratchet"
         }
       ]
     },
