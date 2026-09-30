@@ -142,10 +142,18 @@ async def fetch_field(
         
         # ADDED ALIAS CHECK HERE:
         if not record:
-            from app.models.geo_id_model import GeoIDAlias
-            alias = db.query(GeoIDAlias).filter(GeoIDAlias.alias_content_hash == geo_id).first()
-            if alias:
-                record = db.query(GeoID).filter(GeoID.geo_id == alias.canonical_geo_id).first()
+            from app.models.geo_id_model import GeoIDAlias, GeoIDRegimeAlias
+            
+            # First check regime alias (the actual V1 -> V2 mapping table)
+            regime_alias = db.query(GeoIDRegimeAlias).filter(GeoIDRegimeAlias.v1_geo_id == geo_id).first()
+            if regime_alias:
+                record = db.query(GeoID).filter(GeoID.geo_id == regime_alias.v2_geo_id).first()
+            
+            # Fallback to content hash alias
+            if not record:
+                alias = db.query(GeoIDAlias).filter(GeoIDAlias.alias_content_hash == geo_id).first()
+                if alias:
+                    record = db.query(GeoID).filter(GeoID.geo_id == alias.canonical_geo_id).first()
         
         if not record:
             raise HTTPException(
