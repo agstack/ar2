@@ -140,6 +140,13 @@ async def fetch_field(
             )
         ).first()
         
+        # ADDED ALIAS CHECK HERE:
+        if not record:
+            from app.models.geo_id_model import GeoIDAlias
+            alias = db.query(GeoIDAlias).filter(GeoIDAlias.alias_content_hash == geo_id).first()
+            if alias:
+                record = db.query(GeoID).filter(GeoID.geo_id == alias.canonical_geo_id).first()
+        
         if not record:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
