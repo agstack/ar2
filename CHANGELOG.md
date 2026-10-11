@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Tier 3 trace-forward run with nothing patched** (`app/tests/test_tier3_live_pancake.py`):
+  a stub Pancake on a real socket answers the two routes AR2 calls at Tier 3, the
+  ledger write and the holder lookup, and records what it receives. Proves the ledger
+  packet leaves the process with the shared secret, the holder request carries the
+  authority credential and names the matched lots, the ledger write precedes
+  disclosure, an unreachable ledger refuses with 503 before any holder lookup, and
+  Tier 1 generates no Pancake traffic at all. Every earlier Tier 3 test patched both
+  calls (review ledger AG-016).
+- `app/tests/testkit/grants.py`: a shared minter for field-access grants.
+
 ## [v0.9-review]
 
 ### Added
