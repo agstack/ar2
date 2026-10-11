@@ -41,9 +41,16 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
     monkeypatch.setenv("TEST_STATUS_LIST_DIR", TESTKIT)
+    # Other modules install their hub-user override at import time, which is
+    # before this fixture runs and after it would have popped. Restore rather
+    # than pop, or every later module runs against the real dependency.
+    previous = app.dependency_overrides.get(require_hub_user)
     app.dependency_overrides[require_hub_user] = lambda: {"sub": "pancake-forwarded@demo.com"}
     yield
-    app.dependency_overrides.pop(require_hub_user, None)
+    if previous is None:
+        app.dependency_overrides.pop(require_hub_user, None)
+    else:
+        app.dependency_overrides[require_hub_user] = previous
 
 
 @pytest.fixture
