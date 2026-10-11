@@ -42,13 +42,14 @@ def log_internal_read(user_sub: str | None, artifact_id: str):
     not a disclosure to a person, but it is a read of a gated artifact with
     no credential behind it, and the ledger is where such reads belong.
     """
+    # Pancake's AuditEventRequest requires credential_id as a string; there is
+    # no credential here, and the string says so rather than inventing one.
     packet = {
         "event": "list.read.internal",
         "who": user_sub or "service",
-        "credential_id": None,
+        "credential_id": "none:internal-shared-secret",
         "seed_geoid": artifact_id,
         "artifact": artifact_id,
-        "basis": "internal-shared-secret",
     }
     _append_to_meal_chain(packet)
 

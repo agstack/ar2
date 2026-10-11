@@ -93,7 +93,11 @@ def test_the_secret_reads_members_and_the_read_is_in_the_ledger(meal):
     assert entry["event"] == "list.read.internal"
     assert entry["artifact"] == lot
     assert entry["who"] == "pancake-forwarded@demo.com"
-    assert entry["basis"] == "internal-shared-secret"
+    assert entry["credential_id"] == "none:internal-shared-secret"
+    # Pancake's AuditEventRequest (pancake_services/grants/routers/audit.py)
+    # requires these four as strings; the e2e workflow found a None here.
+    for key in ("event", "who", "credential_id", "seed_geoid"):
+        assert isinstance(entry[key], str), key
 
 
 def test_the_ledger_write_happens_before_the_members_are_returned():
