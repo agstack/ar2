@@ -208,7 +208,7 @@
         {
           "date": "2026-10-08",
           "what": "ar2-hub minted the trace-forward capability from the role the user typed at registration.",
-          "where": "ar2-hub hub_main.generate_jwt at 2a9a3ea; agstack/ar2-hub#9"
+          "where": "ar2-hub hub_main.generate_jwt at 9e53c35; agstack/ar2-hub#9"
         }
       ],
       "enforced_by": [
