@@ -25,7 +25,7 @@ Endpoint: `POST /mcp`, streamable HTTP, bearer token from the hub. Discovery at 
 | `GET /geoid/{geo_id}/eudr-export` | `eudr_export` | optional | refuses without | The only read route that refuses without a grant rather than answering coarsely, because a masked cell is not a filing. |
 | `POST /get-percentage-overlap-two-fields` | `get_percentage_overlap_two_fields` | none | -- | Answers whether two Geo Ids name the same ground while disclosing only the one number. |
 | `POST /list-artifact` | `register_list_artifact` | hub token | -- | FSMA 204 lot. `location_geo_id` is the traceability lot code source (21 CFR 1.1330(a)(14)); omitting it records a gap rather than failing. |
-| `GET /list-artifact/reverse/{geoid}` | `get_list_artifact_reverse` | hub token | -- |  |
+| `GET /list-artifact/reverse/{geoid}` | `get_list_artifact_reverse` | hub token | -- | Gated twice, like run_traceforward: a hub token to call at all, then a grant for this field or an authority credential with a scope. The first hop of trace-forward, carrying the same gate. |
 | `GET /list-artifact/{list_id}` | `get_list_artifact` | hub token | -- | Gated twice: a hub token to call at all, then a grant or authority credential to see the members. |
 | `GET /list-artifact/{list_id}/traceback` | `trace_back` | hub token | -- | One hop is one lot, which is the unit 21 CFR 1.1320(a) records. |
 | `POST /populate-country-in-geo-ids` | `populate_country_in_geo_ids` | none | -- | Maintenance. Walks the whole table; not for answering a question. |

@@ -84,6 +84,10 @@ NOTES = {
     "get_list_artifact":
         "Gated twice: a hub token to call at all, then a grant or authority "
         "credential to see the members.",
+    "get_list_artifact_reverse":
+        "Gated twice, like run_traceforward: a hub token to call at all, then a "
+        "grant for this field or an authority credential with a scope. The first "
+        "hop of trace-forward, carrying the same gate.",
     "trace_back":
         "One hop is one lot, which is the unit 21 CFR 1.1320(a) records.",
     "run_traceforward":

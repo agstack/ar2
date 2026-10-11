@@ -65,8 +65,10 @@ Follow these steps to run the Node locally alongside the `ar2-hub` and `Pancake`
 | `GET`  | `/geoid/{geoid}/eudr-export` | Exports an EUDR-compliant GeoJSON artifact. | Yes (Grant) |
 | `POST` | `/list-artifact` | Registers a content-derived list (a lot/case/pallet/retail item) over GeoIDs, nested lists (`L:`), or regions (`R:`). Append-only. | Yes (Hub JWT) |
 | `POST` | `/region-artifact` | Registers a content-derived region from a WKT boundary (no acreage cap) or from member GeoIDs/lists. | Yes (Hub JWT) |
-| `GET`  | `/list-artifact/{list_id}` | Returns the members of a list artifact. | Yes (Hub JWT) |
-| `GET`  | `/list-artifact/reverse/{geoid}` | Trace-forward: every list/region containing a GeoID, climbed recursively to terminal products. | Yes (Hub JWT + `trace-forward` capability + seed authorization; accredited authority credential for the identity tier) |
+| `GET`  | `/list-artifact/{list_id}` | Returns the members of a list artifact. | Yes (Hub JWT, then a grant for the list or an authority credential) |
+| `GET`  | `/list-artifact/reverse/{geoid}` | The first hop of trace-forward: the lists that name a GeoID directly. | Yes (Hub JWT, then a grant for the seed or an authority credential with `?scope=`; the same gate as `/traceforward`) |
+| `POST` | `/traceforward` | Trace-forward: every list/region containing a GeoID, climbed recursively to terminal products. | Yes (Hub JWT with the `trace-forward` capability or a grant, then a grant for the seed or an authority credential; identities only on the authority path, audited) |
+| `GET`  | `/list-artifact/{list_id}/traceback` | Trace-back: a lot walked down to its input lots and fields, one hop per lot. | Yes (Hub JWT, then a grant for the list or an authority credential) |
 
 See [TRACEABILITY.md](./TRACEABILITY.md) for how these endpoints compose into trace-back and trace-forward.
 

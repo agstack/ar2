@@ -46,6 +46,7 @@ from app.models.geo_id_model import (
     ListMemberEdge,
 )
 from app.s2_services import S2Service
+from app.tests.testkit.grants import grant_header_for  # noqa: E402
 from app.utils import Utils
 
 app.dependency_overrides[require_hub_user] = lambda: {
@@ -457,7 +458,7 @@ def test_reverse_lookup_finds_a_list_through_a_v1_identifier():
     v1_id = "legacy-" + uuid.uuid4().hex[:12]
     _alias_v1(v1_id, v2_id)
 
-    r = client.get(f"/list-artifact/reverse/{v1_id}")
+    r = client.get(f"/list-artifact/reverse/{v1_id}", headers=grant_header_for(v1_id))
     assert r.status_code == 200, r.text
     assert list_id in r.json()["list_ids"], (
         "the v1 identifier must reach lists registered against its v2 identity"
@@ -501,6 +502,6 @@ def test_a_list_registered_against_a_v1_geoid_is_still_traceable():
     finally:
         db.close()
 
-    r = client.get(f"/list-artifact/reverse/{v2_id}")
+    r = client.get(f"/list-artifact/reverse/{v2_id}", headers=grant_header_for(v2_id))
     assert r.status_code == 200, r.text
     assert list_id in r.json()["list_ids"]

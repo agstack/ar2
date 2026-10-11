@@ -230,22 +230,49 @@ class ListReverseResponse(BaseModel):
 @router.get("/list-artifact/reverse/{geoid}", response_model=ListReverseResponse)
 def get_list_artifact_reverse(
     geoid: str,
+    scope: str | None = None,
+    x_grant_token: str | None = Header(None),
+    x_authority_token: str | None = Header(None),
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
 ):
     """
     Retrieves all list IDs that contain the given geoid.
 
+    Gated exactly as POST /traceforward is: a verified grant for this seed, or
+    an authority credential. This route answers the first hop of the same
+    question -- which lots is this field in -- and until 2026-10 it answered it
+    for any hub login, with no grant and no audit entry. Measured live, that
+    was five of the six lots the gated route returns (review ledger AG-015).
+    A second door to a gated answer has to carry the same gate.
+
     Expands the seed through its equivalence set first, so a v1 GeoID, a
     superseded content-hash alias and the canonical GeoID all return the same
     lists. Without this the reverse lookup silently disagrees with
     /traceforward about what counts as the same field.
     """
+    from app.auth import authorize_artifact
+    from app.meal_logger import log_traceforward
+    if x_authority_token and not scope:
+        raise HTTPException(status_code=400, detail="scope is required with an authority credential")
+    auth_result = authorize_artifact(
+        grant_token=x_grant_token,
+        authority_token=x_authority_token,
+        geoid=geoid,
+        scope=scope,
+        raise_404_on_fail=False,
+    )
+
     seeds = _equivalence_set(db, geoid)
-    list_ids = db.execute(
+    list_ids = sorted(set(db.execute(
         select(ListMemberEdge.list_id).where(ListMemberEdge.geoid.in_(seeds))
-    ).scalars().all()
-    return ListReverseResponse(list_ids=sorted(set(list_ids)))
+    ).scalars().all()))
+    if auth_result.get("used_authority"):
+        # Same ledger event as the gated route: an authority asked which lots
+        # a field is in, and got an answer. Audit before disclosure.
+        log_traceforward(user.get("sub"), auth_result.get("authority_jti"),
+                         geoid, scope, len(list_ids), list_ids)
+    return ListReverseResponse(list_ids=list_ids)
 
 
 # --------------------------------------------------------------------------

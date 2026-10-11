@@ -613,16 +613,21 @@ def build_mcp(*, hub_url: str | None = None,
             "GET /list-artifact/reverse/{geoid}. Which lots a given field "
             "appears in. The reverse index behind a recall: given a "
             "contaminated field, the lots that carried its produce. Requires a "
-            "hub token. The seed is expanded through its equivalence set "
-            "first, so a v1 Geo Id, a superseded alias and the canonical Geo Id "
-            "all return the same lots."
+            "hub token, and gated beyond that exactly like run_traceforward: "
+            "grant_token for this field, or authority_token with a scope. The "
+            "seed is expanded through its equivalence set first, so a v1 Geo "
+            "Id, a superseded alias and the canonical Geo Id all return the "
+            "same lots."
         )
     )
     async def get_list_artifact_reverse(
-        geoid: str, token: str | None = None,
+        geoid: str, grant_token: str | None = None,
+        authority_token: str | None = None, scope: str | None = None,
+        token: str | None = None,
     ) -> dict[str, Any]:
         return await _handle(
-            trace.get_list_artifact_reverse, geoid=geoid,
+            trace.get_list_artifact_reverse, geoid=geoid, scope=scope,
+            x_grant_token=grant_token, x_authority_token=authority_token,
             user=_required(token, "the reverse lot index"))
 
     # -- GET /list-artifact/{list_id}/traceback ---------------------------
