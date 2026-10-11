@@ -644,7 +644,6 @@ def build_mcp(*, hub_url: str | None = None,
         return await _handle(
             trace.trace_back, list_id=list_id, max_depth=max_depth,
             x_grant_token=grant_token, x_authority_token=authority_token,
-            x_pancake_internal=None,
             user=_required(token, "tracing a lot back"))
 
     # -- POST /traceforward ------------------------------------------------

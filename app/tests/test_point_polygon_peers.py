@@ -240,7 +240,11 @@ def test_both_kinds_join_one_list_and_prove_membership(plots):
     list_id = created.json()["list_id"]
     assert len(list_id) == 64
 
-    fetched = client.get(f"/list-artifact/{list_id}", headers=INTERNAL)
+    # The internal read is written to the MEAL ledger before it is answered;
+    # capture the write rather than ship it to a Pancake that is not running.
+    from unittest.mock import patch
+    with patch("app.meal_logger._append_to_meal_chain"):
+        fetched = client.get(f"/list-artifact/{list_id}", headers=INTERNAL)
     assert fetched.status_code == 200
     assert sorted(fetched.json()["members"]) == members
 
