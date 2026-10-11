@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- **The shared secret is transport, not authorisation**: `AR2_INTERNAL_SHARED_SECRET` opened
+  `GET /list-artifact/{list_id}` and `GET /list-artifact/{list_id}/traceback` with no
+  credential and no MEAL entry (review ledger AG-076). Pancake, holding the same secret,
+  still demands a credential and still logs. Now: the secret opens the members read only,
+  which Pancake needs to mint a grant before any grant exists, and every such read is
+  written to the ledger as `list.read.internal` before the members are returned, failing
+  closed if the ledger is unreachable. The secret no longer opens trace-back at all; no
+  service called it that way.
+
+### Added
+- `app/tests/test_internal_secret.py`: eight tests. The trace-back control and the ledger
+  control both fail against the previous code; each has a sibling that shows the same
+  check can fire.
+
 ## [v0.9-review]
 
 ### Added

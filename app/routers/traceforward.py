@@ -203,16 +203,26 @@ def get_list_artifact(
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db)
 ):
-    if not _is_trusted_internal(x_pancake_internal):
-        from app.auth import authorize_artifact
-        from app.meal_logger import log_traceback
+    """
+    Retrieves the members of a content-derived list artifact from the AR2 node.
+
+    Two ways in. A credential -- a grant for this list, or an authority
+    credential -- is the ordinary one. The shared secret is the other: Pancake
+    reads a lot's members to mint a grant on the owner's behalf, at which point
+    no grant exists yet, so the secret has to admit that read. It no longer
+    admits it silently: every internal read is written to the MEAL ledger
+    before the members are returned, with the hub subject Pancake forwarded.
+    The ledger is the control; the secret is only the transport.
+    """
+    from app.auth import authorize_artifact
+    from app.meal_logger import log_internal_read, log_traceback
+    if _is_trusted_internal(x_pancake_internal):
+        log_internal_read(user.get("sub"), list_id)
+    else:
         auth_result = authorize_artifact(x_grant_token, x_authority_token, list_id=list_id, raise_404_on_fail=True)
         if auth_result.get("used_authority"):
             log_traceback(user.get("sub"), auth_result.get("authority_jti"), list_id)
 
-    """
-    Retrieves the members of a content-derived list artifact from the AR2 node.
-    """
     existing = db.execute(select(ListArtifact).where(ListArtifact.list_id == list_id)).scalar_one_or_none()
     if not existing:
         raise HTTPException(status_code=404, detail="ListArtifact not found")
@@ -308,25 +318,27 @@ def trace_back(
     max_depth: int = MAX_TRACEBACK_DEPTH,
     x_grant_token: str | None = Header(None),
     x_authority_token: str | None = Header(None),
-    x_pancake_internal: str | None = Header(None),
     user: dict = Depends(require_hub_user),
     db: Session = Depends(get_db),
 ):
     """Walk downward from a list artifact to the fields, one hop per step.
 
-    Authorization is identical to GET /list-artifact/{list_id}: a grant scoped to
-    the list, or an authority credential. Authority use is written to the MEAL
-    ledger, because a regulator reading a whole supply chain is exactly the event
-    that must be auditable.
+    Authorization: a grant scoped to the list, or an authority credential.
+    Authority use is written to the MEAL ledger, because a regulator reading a
+    whole supply chain is exactly the event that must be auditable.
+
+    The shared secret does not open this route. It admits one read on
+    GET /list-artifact/{list_id}, which Pancake needs to mint a grant; no
+    service needs a whole supply chain without a credential, and until 2026-10
+    the secret opened this walk too, with no ledger entry (review ledger AG-076).
     """
-    if not _is_trusted_internal(x_pancake_internal):
-        from app.auth import authorize_artifact
-        from app.meal_logger import log_traceback
-        auth_result = authorize_artifact(
-            x_grant_token, x_authority_token, list_id=list_id, raise_404_on_fail=True
-        )
-        if auth_result.get("used_authority"):
-            log_traceback(user.get("sub"), auth_result.get("authority_jti"), list_id)
+    from app.auth import authorize_artifact
+    from app.meal_logger import log_traceback
+    auth_result = authorize_artifact(
+        x_grant_token, x_authority_token, list_id=list_id, raise_404_on_fail=True
+    )
+    if auth_result.get("used_authority"):
+        log_traceback(user.get("sub"), auth_result.get("authority_jti"), list_id)
 
     root = db.execute(
         select(ListArtifact).where(ListArtifact.list_id == list_id)
