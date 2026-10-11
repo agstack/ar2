@@ -101,6 +101,14 @@ ledger, not this block, or check L will fail on the next run.
 
 *Enforced by: harness/stomata/packet.py, harness/tests/test_stomata.py*
 
+### second-door-to-a-gated-answer (4 occurrences)
+
+**When:** Adding a route, header, flag or claim that answers a question an existing route already gates, or reviewing one.
+
+**Do:** Every door to a gated answer carries the same gate: enumerate the routes whose answer is gated and require each handler to call the gate and read no flag. A convenience path, a service header, an environment variable or a self-asserted claim that reaches the same data is a second key, and a second key nobody tracks is the one that gets used.
+
+*Enforced by: app/tests/test_gate_inventory.py::test_every_door_to_a_gated_answer_carries_the_gate*
+
 ### prose-warning-instead-of-a-check (3 occurrences)
 
 **When:** You have identified a failure mode and are about to write it down in a document, review comment or email.
