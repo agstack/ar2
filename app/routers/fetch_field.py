@@ -161,10 +161,7 @@ async def fetch_field(
                 detail="Field not found, invalid Geo Id."
             )
         
-        import os
         has_l1 = bool(x_field_grant and verify_field_grant(x_field_grant, record.geo_id))
-        if not has_l1 and os.getenv("AR_ACCOUNT_L1") == "legacy" and user is not None:
-            has_l1 = True
 
         return apply_masking_logic(record, {"granted": True} if has_l1 else None, s2_index)
 
@@ -187,10 +184,7 @@ async def fetch_field_wkt(geo_id: str, user: dict | None = Depends(get_current_u
         if not record:
             raise HTTPException(status_code=404, detail="Field not found.")
             
-        import os
         has_l1 = bool(x_field_grant and verify_field_grant(x_field_grant, record.geo_id))
-        if not has_l1 and os.getenv("AR_ACCOUNT_L1") == "legacy" and user is not None:
-            has_l1 = True
 
         if has_l1:
             wkt = record.geo_data.get('wkt')
@@ -228,10 +222,7 @@ async def fetch_field_centroid(geo_id: str, user: dict | None = Depends(get_curr
             
         centroid = Utils.fetch_field_centroid_by_wkt(field_wkt)
         
-        import os
         has_l1 = bool(x_field_grant and verify_field_grant(x_field_grant, record.geo_id))
-        if not has_l1 and os.getenv("AR_ACCOUNT_L1") == "legacy" and user is not None:
-            has_l1 = True
 
         if has_l1:
             return {
@@ -268,10 +259,7 @@ async def eudr_export(geo_id: str, user: dict | None = Depends(get_current_user)
         if not record:
             raise HTTPException(status_code=404, detail="Field not found.")
             
-        import os
         has_l1 = bool(x_field_grant and verify_field_grant(x_field_grant, record.geo_id))
-        if not has_l1 and os.getenv("AR_ACCOUNT_L1") == "legacy" and user is not None:
-            has_l1 = True
             
         if not has_l1:
             raise HTTPException(

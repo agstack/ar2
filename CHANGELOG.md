@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Removed
+- **`AR_ACCOUNT_L1=legacy`**: an environment variable that turned any login into an L1
+  grant on `/fetch-field`, `/fetch-field-wkt`, `/fetch-field-centroid` and
+  `/geoid/{id}/eudr-export`. It was a development convenience and would have been a
+  production bypass had it ever been set there; it was documented nowhere. The variable
+  is no longer read. Two tests set it and require the L0 answer on all four routes; a
+  third shows a real grant still unlocks L1 under the same conditions.
+
 ## [v0.9-review]
 
 ### Added

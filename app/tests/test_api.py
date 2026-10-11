@@ -87,12 +87,14 @@ def test_register_and_fetch_field(mock_auth):
     assert res_l1.status_code == 200
     assert res_l1.json()["MaskingLevel"] == "L0"
     
-    print("  -> Step 5: Fetching with Valid Token in AR_ACCOUNT_L1=legacy mode (L1)")
+    print("  -> Step 5: AR_ACCOUNT_L1=legacy no longer unlocks L1 for a login without a grant")
     os.environ["AR_ACCOUNT_L1"] = "legacy"
-    res_l1_leg = client.get(f"/resolve/{geo_id}", headers={"Authorization": "Bearer valid-token"})
+    try:
+        res_l1_leg = client.get(f"/resolve/{geo_id}", headers={"Authorization": "Bearer valid-token"})
+    finally:
+        os.environ.pop("AR_ACCOUNT_L1", None)
     assert res_l1_leg.status_code == 200
-    assert res_l1_leg.json()["MaskingLevel"] == "L1"
-    os.environ.pop("AR_ACCOUNT_L1", None)
+    assert res_l1_leg.json()["MaskingLevel"] == "L0"
     print("[TEST] test_register_and_fetch_field SUCCESS")
 
 def test_fetch_field_wkt(mock_auth):
@@ -274,10 +276,12 @@ def test_real_rs256_auth():
         assert res1.json()["MaskingLevel"] == "L0"
         
         os.environ["AR_ACCOUNT_L1"] = "legacy"
-        res1_leg = client.get(f"/resolve/{geo_id}", headers={"Authorization": f"Bearer {token1}"})
+        try:
+            res1_leg = client.get(f"/resolve/{geo_id}", headers={"Authorization": f"Bearer {token1}"})
+        finally:
+            os.environ.pop("AR_ACCOUNT_L1", None)
         assert res1_leg.status_code == 200
-        assert res1_leg.json()["MaskingLevel"] == "L1"
-        os.environ.pop("AR_ACCOUNT_L1", None)
+        assert res1_leg.json()["MaskingLevel"] == "L0", "a real RS256 login plus the legacy flag is still not a grant"
         
         res2 = client.get(f"/resolve/{geo_id}", headers={"Authorization": f"Bearer {token2}"})
         assert res2.status_code == 200
@@ -429,3 +433,52 @@ def test_identity_resolution_nested(mock_auth):
     alias = db.query(GeoIDAlias).filter(GeoIDAlias.canonical_geo_id == parent_geo_id, GeoIDAlias.relation == "child_of").first()
     assert alias is not None
     db.close()
+
+
+# ---------------------------------------------------------------------------
+# AR_ACCOUNT_L1=legacy. Until 2026-10 this environment variable turned every
+# login into an L1 grant on the four field routes: boundary, WKT, centroid and
+# the EU filing. It was a development convenience that would have been a
+# production bypass had it ever been set. The variable is no longer read
+# anywhere. These tests set it, present a valid login and no grant, and
+# require the L0 answer on every route -- and then show that a real grant on
+# the same field still unlocks L1, so the L0 is a refusal and not an outage.
+# ---------------------------------------------------------------------------
+
+def test_the_legacy_flag_unlocks_nothing_on_any_field_route(mock_auth, monkeypatch):
+    monkeypatch.setenv("AR_ACCOUNT_L1", "legacy")
+    res = client.post("/register-field-boundary",
+                      json={"wkt": TEST_POLYGON_WKT, "threshold": 95, "return_s2_indices": False})
+    geo_id = extract_geo_id(res)
+    login = {"Authorization": "Bearer valid-token"}
+
+    r = client.get(f"/resolve/{geo_id}", headers=login)
+    assert r.status_code == 200 and r.json()["MaskingLevel"] == "L0", r.text
+
+    r = client.get(f"/fetch-field-wkt/{geo_id}", headers=login)
+    assert r.status_code == 200 and r.json()["WKT"] is None, r.text
+
+    r = client.get(f"/fetch-field-centroid/{geo_id}", headers=login)
+    assert r.status_code == 200 and r.json()["MaskingLevel"] == "L0", r.text
+
+    r = client.get(f"/geoid/{geo_id}/eudr-export", headers=login)
+    assert r.status_code == 401, r.text
+
+
+def test_a_grant_still_unlocks_l1_so_the_refusal_above_is_a_refusal(mock_auth, monkeypatch, setup_database):
+    """The check can fire: same routes, same login, plus a grant for the field."""
+    monkeypatch.setenv("AR_ACCOUNT_L1", "legacy")
+    geoid = "3f1a9f0f36e44c0cb1ad4c2f8e3a7d6b1c5e9d8f7a6b5c4d3e2f1a0b9c8d7e6f"  # the field valid.sdjwt names
+    grant = {"X-Field-Grant": get_token("valid.sdjwt"), "Authorization": "Bearer valid-token"}
+
+    r = client.get(f"/resolve/{geoid}", headers=grant)
+    assert r.status_code == 200 and r.json()["MaskingLevel"] == "L1", r.text
+
+    r = client.get(f"/fetch-field-wkt/{geoid}", headers=grant)
+    assert r.status_code == 200 and r.json()["WKT"], r.text
+
+    r = client.get(f"/fetch-field-centroid/{geoid}", headers=grant)
+    assert r.status_code == 200 and r.json()["MaskingLevel"] == "L1", r.text
+
+    r = client.get(f"/geoid/{geoid}/eudr-export", headers=grant)
+    assert r.status_code == 200, r.text
