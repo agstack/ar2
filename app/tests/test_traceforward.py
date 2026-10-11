@@ -1,4 +1,3 @@
-import json
 import os
 import uuid
 
@@ -221,35 +220,7 @@ def _hub(capabilities):
     app.dependency_overrides[require_hub_user] = lambda: {
         "sub": "authority@demo.agstack.org", "capabilities": capabilities}
 
-def valid_grant_for(geoid: str) -> str:
-    import base64
-    import hashlib
-    import secrets
-    import time
-
-    import jwt
-
-    def _b64url(data: bytes) -> str:
-        return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-    private_pem = (Path(__file__).parent / "testkit" / "dev_keys" / "dev_issuer_private.pem").read_bytes()
-    
-    salt = _b64url(secrets.token_bytes(16))
-    encoded_disclosure = _b64url(json.dumps([salt, "fields.0", geoid]).encode("utf-8"))
-    digest = _b64url(hashlib.sha256(encoded_disclosure.encode("ascii")).digest())
-
-    claims = {
-        "iss": "did:web:pancake.test",
-        "sub": "owner@demo.com",
-        "iat": int(time.time()),
-        "exp": int(time.time()) + 3600,
-        "vct": "agstack.org/credentials/field-access-grant/v1",
-        "status": {"status_list": {"uri": "http://localhost:8100/grants/status-list", "idx": 1}},
-        "_sd": [digest],
-        "_sd_alg": "sha-256"
-    }
-    token = jwt.encode(claims, private_pem, algorithm="EdDSA", headers={"typ": "vc+sd-jwt", "kid": "pancake-test-1"})
-    return f"{token}~{encoded_disclosure}~"
+from app.tests.testkit.grants import valid_grant_for  # noqa: E402
 
 # 1. Gate A: no capability -> 403
 def test_gate_a_missing_capability_403():
@@ -373,3 +344,92 @@ def test_authority_round_trip():
             fwd = client.post("/traceforward", json={"seed_geoid": geoids[0], "scope": "demo-recall"}, headers=auth)
             assert fwd.status_code == 200
             assert retail_list_id in [m["list_id"] for m in fwd.json()["matches"]]
+
+
+# ---------------------------------------------------------------------------
+# The second door. GET /list-artifact/reverse/{geoid} answers the first hop of
+# the same question /traceforward answers, and until 2026-10 it answered it
+# for any hub login with no grant and no audit entry (review ledger AG-015:
+# five of the six lots the gated route returned, live). These tests hold the
+# gate on the second door to the same shape as the first.
+# ---------------------------------------------------------------------------
+
+def _lot_of(geoid: str) -> str:
+    r = client.post("/list-artifact", json={"members": [geoid]})
+    assert r.status_code == 200, r.text
+    return r.json()["list_id"]
+
+
+def test_reverse_refuses_a_bare_login():
+    """The control: a login with every capability and no credential gets nothing."""
+    _hub(["trace-forward"])
+    seed = create_test_geoid(["111"])
+    lot = _lot_of(seed)
+    r = client.get(f"/list-artifact/reverse/{seed}")
+    assert r.status_code == 403, r.text
+    assert lot not in r.text
+
+
+def test_reverse_refuses_a_grant_for_a_different_field():
+    _hub(["trace-forward"])
+    seed = create_test_geoid(["111"])
+    other = create_test_geoid(["222"])
+    _lot_of(seed)
+    r = client.get(f"/list-artifact/reverse/{seed}",
+                   headers={"X-Grant-Token": valid_grant_for(other)})
+    assert r.status_code == 403
+
+
+def test_reverse_answers_a_grant_for_the_seed_and_the_check_can_fire():
+    """The same lot the control must not reveal is revealed here, so the
+    control is shown to be testing a real answer rather than an empty index."""
+    _hub([])  # no capability at all: the grant is sufficient, as on /traceforward
+    seed = create_test_geoid(["111"])
+    lot = _lot_of(seed)
+    r = client.get(f"/list-artifact/reverse/{seed}",
+                   headers={"X-Grant-Token": valid_grant_for(seed)})
+    assert r.status_code == 200, r.text
+    assert r.json()["list_ids"] == [lot]
+
+
+def test_reverse_with_an_authority_credential_needs_a_scope_and_is_audited():
+    _hub(["trace-forward"])
+    seed = create_test_geoid(["111"])
+    lot = _lot_of(seed)
+    auth = {"X-Authority-Token": _read("valid_authority")}
+
+    no_scope = client.get(f"/list-artifact/reverse/{seed}", headers=auth)
+    assert no_scope.status_code == 400
+
+    packets = []
+    with patch("app.meal_logger._append_to_meal_chain", side_effect=packets.append):
+        r = client.get(f"/list-artifact/reverse/{seed}", params={"scope": "demo-recall"}, headers=auth)
+    assert r.status_code == 200, r.text
+    assert r.json()["list_ids"] == [lot]
+    assert packets and packets[-1]["seed_geoid"] == seed, "an authority answer must leave a MEAL entry"
+
+
+def test_reverse_with_a_grant_is_not_audited():
+    """Tier 1 on /traceforward is not logged; the second door matches it."""
+    _hub([])
+    seed = create_test_geoid(["111"])
+    _lot_of(seed)
+    packets = []
+    with patch("app.meal_logger._append_to_meal_chain", side_effect=packets.append):
+        r = client.get(f"/list-artifact/reverse/{seed}",
+                       headers={"X-Grant-Token": valid_grant_for(seed)})
+    assert r.status_code == 200
+    assert packets == []
+
+
+def test_reverse_and_traceforward_agree_on_the_first_hop():
+    """Same seed, same grant: the second door's answer is contained in the first's."""
+    _hub([])
+    seed = create_test_geoid(["111"])
+    lot = _lot_of(seed)
+    parent = client.post("/list-artifact", json={"members": [f"L:{lot}"]}).json()["list_id"]
+    g = {"X-Grant-Token": valid_grant_for(seed)}
+    rev = set(client.get(f"/list-artifact/reverse/{seed}", headers=g).json()["list_ids"])
+    fwd = set(client.post("/traceforward", json={"seed_geoid": seed}, headers=g).json()["list_ids"])
+    assert rev == {lot}
+    assert rev < fwd and parent in fwd

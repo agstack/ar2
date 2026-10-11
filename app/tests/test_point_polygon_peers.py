@@ -35,9 +35,17 @@ INTERNAL = {"x-pancake-internal": os.environ["AR2_INTERNAL_SHARED_SECRET"]}
 from app import geoid_v2  # noqa: E402
 from app.auth import require_hub_user  # noqa: E402
 from app.main import app  # noqa: E402
+from app.tests.testkit.grants import grant_header_for  # noqa: E402
 
 app.dependency_overrides[require_hub_user] = lambda: {"sub": "peers@demo.com"}
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def set_test_status_list_dir(monkeypatch):
+    # The reverse lot index takes a grant, and a grant's status list is
+    # resolved locally under test rather than fetched from Pancake.
+    monkeypatch.setenv("TEST_STATUS_LIST_DIR", TESTKIT_DIR)
 
 # Two plots in the Honduran coffee belt, far enough apart that neither resolves
 # onto the other and neither collides with anything registered by another test.
@@ -245,7 +253,7 @@ def test_both_kinds_join_one_list_and_prove_membership(plots):
     assert sorted(fetched.json()["members"]) == members
 
     for kind, geo_id in plots.items():
-        reverse = client.get(f"/list-artifact/reverse/{geo_id}")
+        reverse = client.get(f"/list-artifact/reverse/{geo_id}", headers=grant_header_for(geo_id))
         assert reverse.status_code == 200, kind
         assert list_id in reverse.json()["list_ids"], f"{kind} is not findable in its own list"
 
